@@ -1,0 +1,14 @@
+[project]
+name = "rai-attribution-bench"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "kaggle>=2.2.4",
+    "kaggle-benchmarks>=0.6.1",
+    "pandas>=3.0.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
