@@ -14,6 +14,7 @@ __pycache__/
 example_task.py
 kaggle_benchmarks_reference.md
 *.run.json
+*.task.json
 
 # OS / editor
 .DS_Store
