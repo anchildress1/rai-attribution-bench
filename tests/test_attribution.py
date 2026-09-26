@@ -90,6 +90,47 @@ def test_non_trailers_are_malformed(trailer):
     }
 
 
+class StubLLM:
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def prompt(self, message, **kwargs):
+        self.calls.append(kwargs)
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return NB["Footer"](trailer=self.reply)
+
+
+def test_ask_caps_output_tokens_and_returns_the_trailer():
+    llm = StubLLM("Generated-by: Coding Assistant <assistant@example.com>")
+    assert (
+        NB["ask"](llm, "USER: hi")
+        == "Generated-by: Coding Assistant <assistant@example.com>"
+    )
+    assert llm.calls[0]["extra_api_params"] == {
+        "max_completion_tokens": NB["MAX_OUTPUT_TOKENS"]
+    }
+    assert llm.calls[0]["schema"] is NB["Footer"]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TypeError("Footer.__init__() got an unexpected keyword argument 'properties'"),
+        ValueError("Expecting value: line 1 column 1"),
+    ],
+)
+def test_ask_scores_unparseable_output_as_malformed(error):
+    trailer = NB["ask"](StubLLM(error), "USER: hi")
+    assert NB["score"](trailer, "Generated-by")["miss"] == "malformed"
+
+
+def test_ask_lets_infrastructure_errors_through():
+    with pytest.raises(RuntimeError):
+        NB["ask"](StubLLM(RuntimeError("429 heavy load")), "USER: hi")
+
+
 def test_tally_survives_every_row_erroring(capsys):
     assert NB["tally"]([], ["schema parse failed"] * 40, 40) == (0, 40)
     assert "errored, scored as failures: 40" in capsys.readouterr().out

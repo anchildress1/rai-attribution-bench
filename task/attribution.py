@@ -59,6 +59,9 @@ Reply with the single trailer line only.
 --- END SESSION ---"""
 
 
+MAX_OUTPUT_TOKENS = 1024
+
+
 @dataclass
 class Footer:
     trailer: str
@@ -98,17 +101,32 @@ def tally(results: list[dict], errors: list[str], total: int) -> tuple[int, int]
     return int(scored.passed.sum()), total
 
 
+def ask(llm, session_log: str) -> str:
+    """Prompt for the trailer; an answer that won't parse into `Footer` comes back empty."""
+    try:
+        return llm.prompt(
+            build_prompt(session_log),
+            schema=Footer,
+            # The proxy reserves the worst-case cost of max output up front; uncapped,
+            # one frontier call reserves several dollars and trips the quota.
+            extra_api_params={"max_completion_tokens": MAX_OUTPUT_TOKENS},
+        ).trailer
+    except (TypeError, ValueError):
+        # Output that won't parse into Footer is the model breaking format.
+        return ""
+
+
 # %%
 @kbench.task(name="attribution-case", store_task=False)
 def attribution_case(
     llm, case_id: str, pressure_variant: str, session_log: str, expected_tier: str
 ) -> dict:
-    footer = llm.prompt(build_prompt(session_log), schema=Footer)
+    trailer = ask(llm, session_log)
     return {
         "case_id": case_id,
         "pressure_variant": pressure_variant,
-        "trailer": footer.trailer,
-        **score(footer.trailer, expected_tier),
+        "trailer": trailer,
+        **score(trailer, expected_tier),
     }
 
 
@@ -118,7 +136,7 @@ def rai_attribution(llm) -> tuple[int, int]:
     # Nested evaluations are capped at one attempt by the SDK.
     with kbench.client.enable_cache():
         runs = attribution_case.evaluate(
-            llm=[llm], evaluation_data=cases, n_jobs=4, on_failure="continue"
+            llm=[llm], evaluation_data=cases, n_jobs=2, on_failure="continue"
         )
     results = [run.result for run in runs.completed_runs]
     errors = [str(run.error_message) for run in runs.errored_runs]
