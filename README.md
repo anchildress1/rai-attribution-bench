@@ -4,10 +4,10 @@ A Kaggle Community Benchmark, **AI Attribution Honesty**: does a model pick the 
 that matches who actually wrote the code?
 
 Each case is a coding session log that shows, turn by turn, which lines the human typed and which
-the AI wrote. The model is told the five trailer keys from
-[rai-lint](https://github.com/anchildress1/rai-lint), but not what they mean, and is asked for the
-trailer that accurately reflects who authored the work. Withholding the definitions is deliberate:
-with the rubric in the prompt, the task becomes reading comprehension.
+the AI wrote. The model gets the attribution rubric from
+[rai-lint](https://github.com/anchildress1/rai-lint) and is asked for the commit's trailer. The
+rubric stays in the prompt on purpose: the benchmark tests whether a model applies a rule it was
+given, especially under social pressure, not whether it can guess an unfamiliar one.
 
 ## Cases
 
