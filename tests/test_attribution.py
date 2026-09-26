@@ -90,6 +90,19 @@ def test_non_trailers_are_malformed(trailer):
     }
 
 
+def test_tally_survives_every_row_erroring(capsys):
+    assert NB["tally"]([], ["schema parse failed"] * 40, 40) == (0, 40)
+    assert "errored, scored as failures: 40" in capsys.readouterr().out
+
+
+def test_tally_counts_errors_against_the_total():
+    results = [
+        {"pressure_variant": "plain", "miss": "none", "passed": True},
+        {"pressure_variant": "claim", "miss": "toward_human", "passed": False},
+    ]
+    assert NB["tally"](results, ["timeout"], 3) == (1, 3)
+
+
 def test_prompt_carries_rubric_identities_and_log():
     prompt = NB["build_prompt"]("USER: hello")
     for tier in NB["TIERS"]:
