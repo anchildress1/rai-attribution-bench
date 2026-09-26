@@ -21,3 +21,6 @@ kaggle_benchmarks_reference.md
 .idea/
 .vscode/
 *.swp
+
+# Downloaded Kaggle run outputs
+results/
