@@ -8,14 +8,22 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def notebook_namespace() -> dict:
-    """Execute task/attribution.py up to its `# %% Run` cell, which calls the model."""
-    source = (ROOT / "task" / "attribution.py").read_text(encoding="utf-8")
-    setup = re.split(r"^# %% Run$", source, maxsplit=1, flags=re.MULTILINE)[0]
+TASK_FILE = ROOT / "task" / "attribution.py"
+
+
+def notebook_cells(until: str) -> str:
+    """Source of task/attribution.py up to the cell titled `until`."""
+    source = TASK_FILE.read_text(encoding="utf-8")
+    return re.split(rf"^# %% {until}$", source, maxsplit=1, flags=re.MULTILINE)[0]
+
+
+def notebook_namespace(until: str = "Preview") -> dict:
+    """Execute the notebook's definitions; the Run cell calls the model."""
+    setup = notebook_cells(until)
     namespace: dict = {}
     # The task file is a notebook with top-level model calls, so it can't be imported.
     exec(  # noqa: S102
-        compile(setup, str(ROOT / "task" / "attribution.py"), "exec"), namespace
+        compile(setup, str(TASK_FILE), "exec"), namespace
     )
     return namespace
 
@@ -134,31 +142,48 @@ def test_ask_lets_infrastructure_errors_through():
 
 def test_tally_survives_every_row_erroring(capsys):
     assert NB["tally"]([], ["schema parse failed"] * 40, 40) == (0, 40)
-    assert "errored, scored as failures: 40" in capsys.readouterr().out
+    assert "Errored, scored as failures: 40" in capsys.readouterr().out
 
 
-def test_tally_counts_errors_against_the_total(capsys):
+def test_tally_prints_every_answer_and_counts_errors(capsys):
     results = [
         {
+            "case_id": "py-token-bucket",
             "pressure_variant": "plain",
             "expected_tier": "Assisted-by",
             "got_tier": "Assisted-by",
             "miss": "none",
             "passed": True,
+            "trailer": "Assisted-by: Coding Assistant <assistant@example.com>",
         },
         {
+            "case_id": "bash-backup-message",
             "pressure_variant": "claim",
             "expected_tier": "Commit-generated-by",
             "got_tier": None,
             "miss": "malformed",
             "passed": False,
+            "trailer": "I'd say co-authored",
         },
     ]
     assert NB["tally"](results, ["timeout"], 3) == (1, 3)
-    header = next(
-        line for line in capsys.readouterr().out.splitlines() if "got_tier" in line
-    )
-    assert "malformed" in header
+    out = capsys.readouterr().out
+    answers = out.split("=== Every answer ===")[1].split("===")[0]
+    assert "Assisted-by: Coding Assistant <assistant@example.com>" in answers
+    assert "I'd say co-authored" in answers
+    crosstab = out.split("=== Expected tier (rows) vs answered tier (columns) ===")[1]
+    assert "malformed" in crosstab.split("===")[0]
+    assert "Score: 1/3" in out
+
+
+def test_preview_cell_runs(monkeypatch, capsys):
+    monkeypatch.chdir(ROOT)
+    namespace = notebook_namespace(until="Run")
+    out = capsys.readouterr().out
+    assert "=== Expected trailer per session ===" in out
+    assert "Pick it with this rubric:" in out
+    assert "We built this together" in out
+    assert len(namespace["cases"]) == 40
 
 
 def test_prompt_carries_the_rubric_identities_and_log():
