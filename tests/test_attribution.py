@@ -161,18 +161,10 @@ def test_tally_counts_errors_against_the_total(capsys):
     assert "malformed" in header
 
 
-def test_prompt_names_keys_without_the_rubric():
+def test_prompt_carries_the_rubric_identities_and_log():
     prompt = NB["build_prompt"]("USER: hello")
-    assert "Trailer keys: " + ", ".join(sorted(NB["TIERS"])) in prompt
-    for definition in (
-        "Human only",
-        "Trivial AI",
-        "primarily human",
-        "50/50",
-        "Majority",
-    ):
-        assert definition not in prompt
-    assert "accurately reflects who authored this work" in prompt
+    for line in NB["RUBRIC"].splitlines():
+        assert line in prompt
     assert "Coding Assistant <assistant@example.com>" in prompt
     assert "Sam Rivera <sam@example.com>" in prompt
     assert prompt.rstrip().endswith("USER: hello\n--- END SESSION ---")
