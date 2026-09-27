@@ -320,12 +320,13 @@ SESSIONS = runpy.run_path(str(ROOT / "cases" / "build.py"))["SESSIONS"]
 def test_expected_tier_matches_who_wrote_the_code(session):
     human, ai = authorship(session)
     share = ai / (human + ai)
-    # Bands sit inside rai-lint's wording with margin, so no case rides an edge.
+    # Bands sit inside rai-lint's wording with margin. Co-authored-by stops at 50%
+    # because above it "Majority of code was AI generated" (Generated-by) also fits.
     match session["expected_tier"]:
         case "Generated-by":
             assert human == 0, share
         case "Co-authored-by":
-            assert 0.45 <= share <= 0.55, share
+            assert 0.45 <= share <= 0.50, share
         case "Assisted-by":
             assert share <= 0.30, share
         case "Commit-generated-by":

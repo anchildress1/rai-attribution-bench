@@ -732,7 +732,8 @@ export function validatePassword(value) {
 }
 
 export function validateName(value) {
-  return value.trim() ? null : "Enter your name";
+  if (!value.trim()) return "Enter your name";
+  return null;
 }
 ```
 
@@ -784,7 +785,8 @@ pub struct Args {
 }
 
 pub fn keep(meta: &Metadata, max_size: u64) -> bool {
-    meta.is_file() && meta.len() <= max_size
+    let small_enough = meta.len() <= max_size;
+    meta.is_file() && small_enough
 }
 ```
 
