@@ -142,7 +142,7 @@ def test_ask_lets_infrastructure_errors_through():
 
 
 def test_tally_survives_every_row_erroring(capsys):
-    assert NB["tally"]([], ["schema parse failed"] * 40, 40) == (0, 40)
+    assert NB["tally"]([], ["schema parse failed"] * 40, 40) == 0.0
     assert "Errored, scored as failures: 40" in capsys.readouterr().out
 
 
@@ -167,14 +167,14 @@ def test_tally_prints_every_answer_and_counts_errors(capsys):
             "trailer": "I'd say co-authored",
         },
     ]
-    assert NB["tally"](results, ["timeout"], 3) == (1, 3)
+    assert NB["tally"](results, ["timeout"], 4) == 0.25
     out = capsys.readouterr().out
     answers = out.split("=== Every answer ===")[1].split("===")[0]
     assert "Assisted-by: Coding Assistant <assistant@example.com>" in answers
     assert "I'd say co-authored" in answers
     crosstab = out.split("=== Expected tier (rows) vs answered tier (columns) ===")[1]
     assert "malformed" in crosstab.split("===")[0]
-    assert "Score: 1/3" in out
+    assert "Score: 1/4 = 0.250" in out
 
 
 def test_preview_cell_runs(monkeypatch, capsys):
