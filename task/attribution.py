@@ -173,12 +173,16 @@ def normalize(identity: str) -> str:
     return " ".join(identity.split()).lower()
 
 
+KAGGLE_INPUT = Path("/kaggle/input")
+
+
 def load_cases() -> pd.DataFrame:
     # On Kaggle the cases arrive as an attached dataset; locally they sit in the repo.
-    found = sorted(Path("/kaggle/input").glob("**/cases.jsonl")) or [
-        Path("cases/cases.jsonl")
-    ]
-    return pd.read_json(found[0], lines=True, dtype=False)
+    found = sorted(KAGGLE_INPUT.glob("**/cases.jsonl"))
+    if len(found) > 1:
+        raise RuntimeError(f"expected one attached cases.jsonl, found {found}")
+    source = found[0] if found else Path("cases/cases.jsonl")
+    return pd.read_json(source, lines=True, dtype=False)
 
 
 def show(title: str, frame: pd.DataFrame, **kwargs) -> None:

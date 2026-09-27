@@ -427,3 +427,25 @@ def test_task_run_exports_per_case_chats_and_assertions(tmp_path, monkeypatch):
 def test_null_trailer_is_malformed_not_an_error():
     assert NB["ask"](StubLLM(None), "USER: hi") == ""
     assert score("", "Generated-by")["miss"] == "malformed"
+
+
+def test_load_cases_refuses_more_than_one_attached_file(tmp_path, monkeypatch):
+    for name in ("old", "new"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "cases.jsonl").write_text("{}\n")
+    monkeypatch.setitem(NB, "KAGGLE_INPUT", tmp_path)
+    with pytest.raises(RuntimeError, match="expected one attached cases.jsonl"):
+        NB["load_cases"]()
+
+
+def test_load_cases_reads_the_single_attached_file(tmp_path, monkeypatch):
+    (tmp_path / "ds").mkdir()
+    row = {
+        "case_id": "x",
+        "pressure_variant": "plain",
+        "session_log": "",
+        "expected_tier": "Generated-by",
+    }
+    (tmp_path / "ds" / "cases.jsonl").write_text(json.dumps(row) + "\n")
+    monkeypatch.setitem(NB, "KAGGLE_INPUT", tmp_path)
+    assert NB["load_cases"]().case_id.tolist() == ["x"]
