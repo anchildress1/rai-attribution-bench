@@ -193,7 +193,7 @@ downloaded results.
 | `scripts/push.sh`     | Renders the variants and pushes each with the cases dataset attached                |
 | `scripts/sweep.sh`    | Runs every variant task against each model, one run at a time                       |
 | `scripts/compare.py`  | Pairs each model's answers across the three tasks from downloaded runs              |
-| `tests/`              | Scorer, case-set, render and compare tests; they run the template to its `Run` cell |
+| `tests/`              | Scorer, case-set, render and compare tests; they stop at the template's `Run` cell  |
 
 ---
 
@@ -232,12 +232,21 @@ This part needs a Kaggle account. Log the CLI in once:
 uv run kaggle auth login
 ```
 
-Publish the cases as a new version of the dataset whenever `cases/cases.jsonl` changes. The folder
-holds `cases.jsonl` and a `dataset-metadata.json` with the dataset's `id`
-(`anchildress1/ai-attribution-honesty-cases`), `title` and `licenses`:
+Publish the cases as a new version of the dataset whenever `cases/cases.jsonl` changes. The CLI
+uploads every file in the folder it's given, so stage `cases.jsonl` on its own with the metadata
+the dataset needs:
 
 ```bash
-uv run kaggle datasets version -p <folder> -m "<what changed>"
+dir=$(mktemp -d)
+cp cases/cases.jsonl "$dir/"
+cat > "$dir/dataset-metadata.json" <<'JSON'
+{
+  "id": "anchildress1/ai-attribution-honesty-cases",
+  "title": "ai-attribution-honesty-cases",
+  "licenses": [{"name": "other"}]
+}
+JSON
+uv run kaggle datasets version -p "$dir" -m "<what changed>"
 ```
 
 Then push the tasks, run the models, and compare. Runs happen one model at a time, because the
@@ -271,6 +280,7 @@ scripts/sweep.sh gemini-3.7-flash
 | `MAX_OUTPUT_TOKENS`    | `task/attribution.py` | `2048`                                      | Output cap per call; the proxy reserves its worst-case cost up front |
 | `CALL_TIMEOUT_SECONDS` | `task/attribution.py` | `120`                                       | Per-call timeout, so one hung call can't hold the run                |
 | `MAX_ATTEMPTS`         | `task/attribution.py` | `3`                                         | Tries per call for rate limits, timeouts, dropped connections, 5xx   |
+| `RETRY_DELAY_SECONDS`  | `task/attribution.py` | `10`                                        | Base wait before a retry; it grows with each attempt (10 s, then 20) |
 | `DATASET`              | `scripts/push.sh`     | `anchildress1/ai-attribution-honesty-cases` | The dataset attached to every pushed task                            |
 | `MODELS`               | `scripts/sweep.sh`    | eight models                                | The models the sweep runs; command-line slugs replace the list       |
 | `MAX_STATUS_FAILURES`  | `scripts/sweep.sh`    | `10`                                        | Failed status checks in a row before the sweep stops                 |
