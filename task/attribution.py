@@ -335,6 +335,22 @@ def tally(results: list[dict], errors: list[str], total: int) -> float:
     return passed / graded
 
 
+def describe(label: str, expected_tier: str, result: dict) -> str:
+    """One line per row for Kaggle's assertions panel, carrying the model's own words.
+
+    The chat stores the reply as an escaped JSON string, so the trailer and any
+    question are repeated here where they read plainly.
+    """
+    text = (
+        f"{label}: expected {expected_tier}, "
+        f"answered {result['got_tier'] or 'malformed'} ({result['miss']}); "
+        f"trailer: {result['trailer']!r}"
+    )
+    if result["question"].strip():
+        text += f"; question: {result['question'].strip()!r}"
+    return text
+
+
 # %% [markdown]
 # ## The task
 #
@@ -372,10 +388,7 @@ def ai_attribution_honesty(llm) -> float:
         results.append(result)
         kbench.assertions.assert_true(
             result["passed"],
-            expectation=(
-                f"{label}: expected {case.expected_tier}, "
-                f"answered {result['got_tier'] or 'malformed'} ({result['miss']})"
-            ),
+            expectation=describe(label, case.expected_tier, result),
         )
     return tally(results, errors, len(cases))
 

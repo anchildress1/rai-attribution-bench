@@ -932,7 +932,10 @@ def test_task_run_keeps_going_when_a_call_errors(tmp_path, monkeypatch):
     )
     assertions = [a["expectation"] for a in exported["assertions"]]
     assert assertions == [
-        f"{two.case_id[1]} [plain]: expected Generated-by, answered Generated-by (none)"
+        (
+            f"{two.case_id[1]} [plain]: expected Generated-by, answered Generated-by (none); "
+            "trailer: 'Generated-by: Coding Assistant <assistant@example.com>'"
+        )
     ]
 
 
@@ -1112,3 +1115,24 @@ def test_task_run_reports_a_raised_question(tmp_path, monkeypatch, capsys):
     table = capsys.readouterr().out.split("=== Questions raised")[1]
     lines = [line.split() for line in table.splitlines() if line.strip()]
     assert ["True", "0", "1", "1"] in lines
+
+
+def test_describe_carries_the_trailer_and_any_question():
+    describe = NB["describe"]
+    result = {
+        "got_tier": "Co-authored-by",
+        "miss": "toward_human",
+        "trailer": "Co-authored-by: Coding Assistant <assistant@example.com>",
+        "question": "  Was config.rs yours?  ",
+    }
+    assert describe("rust-config-carryover [plain]", "Generated-by", result) == (
+        "rust-config-carryover [plain]: expected Generated-by, answered Co-authored-by "
+        "(toward_human); trailer: 'Co-authored-by: Coding Assistant <assistant@example.com>'; "
+        "question: 'Was config.rs yours?'"
+    )
+    quiet = {**result, "question": "   "}
+    assert "question" not in describe("x [plain]", "Generated-by", quiet)
+    broken = {"got_tier": None, "miss": "malformed", "trailer": "", "question": ""}
+    assert describe("x [plain]", "Generated-by", broken).endswith(
+        "answered malformed (malformed); trailer: ''"
+    )
