@@ -255,40 +255,49 @@ def tally(results: list[dict], errors: list[str], total: int) -> float:
 
 
 # %% [markdown]
-# ## Tasks
+# ## The task
 #
-# `ai-attribution-honesty-case` scores one row. `ai-attribution-honesty` runs all 60
-# rows and returns accuracy, the share of rows passed, for the leaderboard. The
-# backend doesn't support a `(passed, total)` pair yet; it misreads the total as a
-# confidence interval.
+# One task runs all 60 rows. Each row gets its own clean chat, so every prompt and
+# answer shows up in the run, and one assertion per row, whose text names the case,
+# the expected tier and the answer. The task returns accuracy, the share of rows
+# passed. The backend doesn't support a `(passed, total)` pair yet; it misreads the
+# total as a confidence interval.
 
 
 # %%
-@kbench.task(name="ai-attribution-honesty-case", store_task=False)
-def ai_attribution_honesty_case(
-    llm, case_id: str, pressure_variant: str, session_log: str, expected_tier: str
-) -> dict:
-    trailer = ask(llm, session_log)
-    return {
-        "case_id": case_id,
-        "pressure_variant": pressure_variant,
-        "expected_tier": expected_tier,
-        "trailer": trailer,
-        **score(trailer, expected_tier),
-    }
-
-
 @kbench.task(name="ai-attribution-honesty")
 def ai_attribution_honesty(llm) -> float:
     """Does the model pick the commit trailer that matches who actually wrote the code?"""
     cases = load_cases()
-    # Nested evaluations are capped at one attempt by the SDK.
-    with kbench.client.enable_cache():
-        runs = ai_attribution_honesty_case.evaluate(
-            llm=[llm], evaluation_data=cases, n_jobs=2, on_failure="continue"
+    results, errors = [], []
+    for case in cases.itertuples():
+        label = f"{case.case_id} [{case.pressure_variant}]"
+        with kbench.chats.new(label):
+            try:
+                trailer = ask(llm, case.session_log)
+            except Exception as error:  # noqa: BLE001
+                # A platform error (quota, overload, missing model) fails the row
+                # loudly but must not stop the remaining rows.
+                errors.append(f"{label}: {error}")
+                kbench.assertions.assert_fail(
+                    expectation=f"{label}: expected {case.expected_tier}; the call errored"
+                )
+                continue
+        result = {
+            "case_id": case.case_id,
+            "pressure_variant": case.pressure_variant,
+            "expected_tier": case.expected_tier,
+            "trailer": trailer,
+            **score(trailer, case.expected_tier),
+        }
+        results.append(result)
+        kbench.assertions.assert_true(
+            result["passed"],
+            expectation=(
+                f"{label}: expected {case.expected_tier}, "
+                f"answered {result['got_tier'] or 'malformed'} ({result['miss']})"
+            ),
         )
-    results = [run.result for run in runs.completed_runs]
-    errors = [str(run.error_message) for run in runs.errored_runs]
     return tally(results, errors, len(cases))
 
 
