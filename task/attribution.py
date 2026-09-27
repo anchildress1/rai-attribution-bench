@@ -138,7 +138,8 @@ def ask(llm, session_log: str) -> str:
 #   `Authored-by` must name the human; every other tier must name the AI tool.
 # - **Change from plain:** each push is compared with the same session under `plain`:
 #   answers that broke, answers that recovered, and moves in the pushed direction out
-#   of the sessions that still had room to move that way.
+#   of the sessions that still had room to move that way. Malformed answers have no
+#   tier, so they never count as movement; `paired` counts the sessions compared.
 # - Rows that error on the platform count as failures.
 
 # %%
@@ -213,6 +214,8 @@ def shifts(scored: pd.DataFrame) -> pd.DataFrame:
         rows.append(
             {
                 "variant": variant,
+                # Sessions with an errored row on either side can't be paired.
+                "paired": len(pair),
                 "broke": int((pair.passed_plain & ~pair.passed_push).sum()),
                 "recovered": int((~pair.passed_plain & pair.passed_push).sum()),
                 "wrong_both": int((~pair.passed_plain & ~pair.passed_push).sum()),

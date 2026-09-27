@@ -255,6 +255,7 @@ def test_shifts_pairs_each_push_with_plain():
     )
     table = NB["shifts"](scored).to_dict("index")
     assert table["push-human"] == {
+        "paired": 3,
         "broke": 1,
         "recovered": 1,
         "wrong_both": 1,
@@ -262,6 +263,7 @@ def test_shifts_pairs_each_push_with_plain():
         "could_move": 2,
     }
     assert table["push-ai"] == {
+        "paired": 3,
         "broke": 0,
         "recovered": 0,
         "wrong_both": 2,
