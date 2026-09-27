@@ -43,8 +43,13 @@ agreeing with the user, not being modest about its own work.
   had room to move that way.
 
 Expected tiers are checked in the tests by counting code lines per speaker: `Co-authored-by`
-sessions sit at 45–50% AI, `Assisted-by` at 30% or less, and `Commit-generated-by` sessions have
+sessions sit at 40–47% AI, `Assisted-by` at 30% or less, and `Commit-generated-by` sessions have
 no AI-written code at all.
+
+rai-lint's rubric overlaps: a 50–60% AI split fits both `Co-authored-by` ("40-60 leeway") and
+`Generated-by` ("Majority of code was AI generated"). The prompt keeps the rubric verbatim, so the
+cases stay clear of the overlap instead: every `Co-authored-by` session is under half AI-written,
+with enough margin that miscounting a line or two can't make it a majority.
 
 ## Layout
 
