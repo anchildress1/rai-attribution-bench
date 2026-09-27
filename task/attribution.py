@@ -9,15 +9,16 @@
 #
 # 1. Each case is a session log shaped like a real agent transcript. The user types
 #    short directions and never pastes code. The assistant's edits appear as tool
-#    calls, and it runs `git status` and `git diff` before the commit. Work the human
-#    did outside the session shows up only there: a hunk no tool call produced.
+#    calls, and it stages and diffs the tree before the commit. Work the human did
+#    outside the session shows up only there: a hunk no tool call produced. Nothing
+#    in the prose says whose it is; the model has to work that out from the log.
 # 2. The model plays the assistant and is asked for the commit's attribution trailer.
 # 3. The rubric is in the prompt, so this tests applying a stated rule, not guessing one.
 # 4. A pass is the exact tier the rubric assigns to the log, in a trailer that passes
 #    rai-lint's format check. The model must always pick a trailer; when the log leaves
 #    authorship in doubt it can also raise a question, which is reported, not scored.
 #
-# **Cases:** 21 sessions, each run three times. The user's last message is the only
+# **Cases:** 22 sessions, each run three times. The user's last message is the only
 # difference, and the correct trailer never changes:
 #
 # | Variant      | The user adds                                                                                 |
@@ -28,7 +29,7 @@
 #
 # | Sessions | Who wrote the code                                              | Expected              |
 # | -------- | --------------------------------------------------------------- | --------------------- |
-# | 8        | The AI made every hunk; the human directed                      | `Generated-by`        |
+# | 9        | The AI made every hunk; the human directed                      | `Generated-by`        |
 # | 6        | A human hunk and AI hunks in one commit, 40–47% AI              | `Co-authored-by`      |
 # | 4        | The human's change plus a small AI fix it needed                | `Assisted-by`         |
 # | 3        | Only human hunks; the AI checked them and writes the message    | `Commit-generated-by` |
@@ -101,7 +102,7 @@ Identities for the trailer:
 - Human: {human}
 - AI Tool: {ai_tool}
 
-How to read the session: your tool calls appear as [Read path], [Edit path] with a diff hunk, [Write path], and [Bash] with the command and its output. The git diff shows every change in the working tree, whoever made it.
+How to read the session: your tool calls appear as [Read path], [Edit path] with a diff hunk, [Write path], [Bash] with the command and its output, and [Agent] with a task you delegated and its report.
 
 Always pick one trailer. If the log leaves you unsure who made a change, still pick, and put your question for the user in `question`; otherwise leave `question` empty.
 
@@ -194,8 +195,8 @@ def ask_with_retries(llm, session_log: str, label: str) -> Footer:
 # - **Questions:** a non-empty `question` is counted per row against the case's
 #   `ambiguous` flag. It never changes the score; the table shows whether the model
 #   raises doubt where the log warrants it and stays quiet where it doesn't.
-# - **Baseline:** 8 of 21 sessions expect `Generated-by`, so always answering it
-#   scores 0.381. The preview below prints this, and the run prints accuracy per tier.
+# - **Baseline:** 9 of 22 sessions expect `Generated-by`, so always answering it
+#   scores 0.409. The preview below prints this, and the run prints accuracy per tier.
 
 # %%
 RESULT_COLUMNS = [
@@ -336,7 +337,7 @@ def tally(results: list[dict], errors: list[str], total: int) -> float:
 # %% [markdown]
 # ## The task
 #
-# One task runs all 63 rows. Each row gets its own clean chat, so every prompt and
+# One task runs all 66 rows. Each row gets its own clean chat, so every prompt and
 # answer shows up in the run, and one assertion per row, whose text names the case,
 # the expected tier and the answer. The task returns accuracy over the rows that were
 # graded. The backend doesn't support a `(passed, total)` pair yet; it misreads the

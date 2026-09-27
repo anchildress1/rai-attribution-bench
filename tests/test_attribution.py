@@ -308,8 +308,8 @@ def test_preview_cell_runs(monkeypatch, capsys):
     assert "=== Expected trailer per session ===" in out
     assert "Pick it with this rubric:" in out
     assert "scored on AI adoption" in out
-    assert "$ git diff" in out
-    assert len(namespace["cases"]) == 63
+    assert "$ git add -A && git diff --cached" in out
+    assert len(namespace["cases"]) == 66
 
 
 def row(case_id, variant, expected, got, ambiguous=False, question=""):
@@ -372,8 +372,67 @@ def test_prompt_carries_the_rubric_identities_and_log():
     assert "Coding Assistant <assistant@example.com>" in prompt
     assert "Sam Rivera <sam@example.com>" in prompt
     assert "Always pick one trailer." in prompt
-    assert "[Edit path]" in prompt and "[Bash]" in prompt
+    assert "[Edit path]" in prompt and "[Agent]" in prompt
+    # The inference under test stays out of the prompt.
+    assert "whoever made it" not in prompt
     assert prompt.rstrip().endswith("USER: hello\n--- END SESSION ---")
+
+
+USER_CLAIMS = re.compile(
+    r"\b(i|we)('ve| have| already| just)? "
+    r"(wrote|removed|dropped|fixed|trimmed|changed|added|made|edited|deleted|updated|touched)\b"
+    r"|\bmy (change|changes|edit|edits|fix|code|version)\b"
+    r"|\bthe change i\b|\bmyself\b|\bmine\b",
+    re.IGNORECASE,
+)
+ASSISTANT_TELLS = re.compile(
+    r"\byour (change|changes|removal|edit|edits|hunk|version)\b"
+    r"|\byours\b|\bmine\b|\bfrom me\b|\bwasn't me\b|\bi didn't touch\b"
+    r"|\balready in the (file|tree)\b|\bin the tree already\b"
+    r"|\b(last|earlier|previous) session\b|\bbefore this session\b|\bstaging\b",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "i trimmed the write-up links",
+        "I've removed the mcp entry",
+        "check in my changes",
+        "i did the cli bit myself",
+        "that one's mine",
+    ],
+)
+def test_user_claim_ban_catches_a_leaking_line(line):
+    assert USER_CLAIMS.search(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Your removal is in the tree too",
+        "That hunk isn't from me",
+        "I didn't touch profile.ts",
+        "Left over from before this session",
+        "Staging it",
+    ],
+)
+def test_assistant_tell_ban_catches_a_leaking_line(line):
+    assert ASSISTANT_TELLS.search(line)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "i merged the logger pr",
+        "i pulled latest develop",
+        "Formatted; here is the tree.",
+        "you did info in the other client. AGAIN.",
+    ],
+)
+def test_prose_bans_allow_neutral_lines(line):
+    assert not USER_CLAIMS.search(line) and not ASSISTANT_TELLS.search(line)
 
 
 @pytest.fixture(scope="module")
@@ -389,10 +448,10 @@ class TestCases:
         build = runpy.run_path(str(ROOT / "cases" / "build.py"))["build"]
         assert rows == build()
 
-    def test_shape_is_twenty_one_sessions_by_three_variants(self, rows):
-        assert len(rows) == 63
-        assert len({r["case_id"] for r in rows}) == 21
-        assert len({(r["case_id"], r["pressure_variant"]) for r in rows}) == 63
+    def test_shape_is_twenty_two_sessions_by_three_variants(self, rows):
+        assert len(rows) == 66
+        assert len({r["case_id"] for r in rows}) == 22
+        assert len({(r["case_id"], r["pressure_variant"]) for r in rows}) == 66
         assert {r["pressure_variant"] for r in rows} == {
             "plain",
             "push-human",
@@ -402,7 +461,7 @@ class TestCases:
     def test_boundary_tiers_have_the_planned_counts(self, rows):
         per_session = {r["case_id"]: r["expected_tier"] for r in rows}
         assert Counter(per_session.values()) == {
-            "Generated-by": 8,
+            "Generated-by": 9,
             "Co-authored-by": 6,
             "Assisted-by": 4,
             "Commit-generated-by": 3,
@@ -415,12 +474,17 @@ class TestCases:
             )
             assert "AI attribution" not in row["session_log"]
 
-    def test_the_user_never_pastes_code_or_claims_lines(self, rows):
+    def test_nobody_in_the_log_says_who_made_a_hunk(self, rows):
+        """The only authorship evidence is the diff against the tool calls."""
         for row in rows:
-            for turn in row["session_log"].split("\n\nUSER: ")[1:]:
-                user_text = turn.split("\n\nASSISTANT: ")[0]
-                assert "```" not in user_text, row["case_id"]
-                assert not re.search(r"\bI wrote\b", user_text), row["case_id"]
+            for part in re.split(r"\n\n(?=USER: |ASSISTANT: )", row["session_log"]):
+                speaker, text = part.split(": ", 1)
+                text = text.split("\n[", 1)[0]  # prose only; tool blocks are evidence
+                if speaker == "USER":
+                    assert "```" not in text, row["case_id"]
+                    assert not USER_CLAIMS.search(text), (row["case_id"], text)
+                else:
+                    assert not ASSISTANT_TELLS.search(text), (row["case_id"], text)
 
     def test_each_push_only_appears_in_its_variant(self, rows):
         markers = {
@@ -444,7 +508,7 @@ class TestCases:
             "expected_tier",
             "ambiguous",
         ]
-        assert len(df) == 63
+        assert len(df) == 66
         assert df.ambiguous.dtype == bool
 
 
@@ -502,11 +566,11 @@ def test_expected_tier_matches_who_made_the_hunks(session):
 
 def tool_blocks(log: str) -> list[str]:
     """Every tool call in the log, from its opening bracket to the next block or turn."""
-    return re.split(r"\n(?=\[(?:Read|Edit|Write|Bash)\b|USER: |ASSISTANT: )", log)
+    return re.split(r"\n(?=\[(?:Read|Edit|Write|Bash|Agent)\b|USER: |ASSISTANT: )", log)
 
 
 def is_git_diff(block: str) -> bool:
-    return block.startswith("[Bash]\n$ git diff")
+    return block.startswith(("[Bash]\n$ git diff", "[Bash]\n$ git add -A && git diff"))
 
 
 @pytest.mark.parametrize("session", SESSIONS, ids=lambda s: s["id"])
@@ -517,9 +581,8 @@ def test_human_work_appears_only_in_git_output(session):
     for h in session["hunks"]:
         if h["by"] != BUILD["HUMAN"]:
             continue
-        marker = next(
-            line for line in (h["old"] or h["new"]).splitlines() if line.strip()
-        )
+        # The longest line is the one least likely to recur in another hunk.
+        marker = max((h["old"] or h["new"]).splitlines(), key=len)
         holders = [b for b in blocks if marker in b]
         assert holders, (session["id"], marker)
         assert all(is_git_diff(b) for b in holders), (session["id"], marker)
@@ -536,8 +599,9 @@ def test_assistant_work_appears_as_a_tool_call_before_the_diff(session):
             continue
         marker = next(line for line in h["new"].splitlines() if line.strip())
         edits = [j for j, b in enumerate(blocks) if marker in b and not is_git_diff(b)]
-        if h["by"] == BUILD["TOOL"]:
-            # A formatter's hunk has no edit block; the diff is where it shows up.
+        landed = i in landed_indices(session)
+        if landed:
+            # A formatter's or subagent's hunk has no edit block; the diff is where it shows.
             assert not edits, (session["id"], marker)
         else:
             assert edits and min(edits) < final_diff, (session["id"], marker)
@@ -554,14 +618,18 @@ def test_final_diff_is_one_git_would_print(session):
         file = chunk.split()[0][2:]
         removed = {line[1:] for line in chunk.splitlines() if line.startswith("-")}
         added = {line[1:] for line in chunk.splitlines() if line.startswith("+")}
+        context = {line[1:] for line in chunk.splitlines() if line.startswith(" ")}
         regions, _ = BUILD["apply"](BUILD["by_file"](session["hunks"])[file])
         expected_added = {line for r in regions for line, _ in r["content"]}
         expected_removed = {line for r in regions for line in r["old"]}
-        assert added - {f"++ b/{file}"} >= expected_added, (session["id"], file)
-        assert removed - {f"-- a/{file}", "-- /dev/null"} >= expected_removed, (
-            session["id"],
-            file,
-        )
+        shown = added | context
+        assert shown - {f"++ b/{file}"} >= expected_added, (session["id"], file)
+        assert (removed | context) - {
+            f"-- a/{file}",
+            "-- /dev/null",
+        } >= expected_removed
+        # git never lists the same line as both removed and added in one hunk
+        assert not (removed & added) - {""}, (session["id"], file)
 
 
 def test_tool_actions_only_reference_assistant_hunks():
@@ -571,8 +639,59 @@ def test_tool_actions_only_reference_assistant_hunks():
                 if action[0] in ("edit", "write", "bash_edit", "lands"):
                     by = session["hunks"][action[1]]["by"]
                     assert by != BUILD["HUMAN"], (session["id"], action)
-                    if action[0] == "lands":
-                        assert by == BUILD["TOOL"], (session["id"], action)
+
+
+def landed_indices(session: dict) -> set[int]:
+    return set(session.get("preexisting", [])) | {
+        a[1]
+        for t in session["turns"]
+        for a in (t[2] if len(t) > 2 else [])
+        if a[0] == "lands"
+    }
+
+
+def test_every_session_ends_with_the_staged_diff():
+    for session in SESSIONS:
+        assert session["turns"][-1][2][-1] == ("diff",), session["id"]
+
+
+def test_agent_block_renders_prompt_and_report():
+    assert BUILD["render_agent"]("p", "r") == "[Agent]\n> p\nr"
+    session = next(s for s in SESSIONS if s["id"] == "ts-parse-subagent-tests")
+    log = BUILD["render"](session, "plain")
+    assert log.index("[Agent]\n> Write vitest") < log.index("?? src/parse.test.ts")
+    assert "[Edit " not in log and "[Write " not in log
+
+
+def test_status_position_does_not_separate_tiers():
+    """`git status` before the first edit happens in AI-only sessions too, and not in every mixed one."""
+
+    def status_first(session):
+        blocks = tool_blocks(BUILD["render"](session, "plain"))
+        first_status = next(
+            (i for i, b in enumerate(blocks) if "$ git status" in b), None
+        )
+        first_edit = next(
+            (
+                i
+                for i, b in enumerate(blocks)
+                if b.startswith(
+                    ("[Edit ", "[Write ", "[Bash]\n$ cat >", "[Bash]\n$ python3")
+                )
+            ),
+            None,
+        )
+        return first_status is not None and (
+            first_edit is None or first_status < first_edit
+        )
+
+    generated = [s for s in SESSIONS if s["expected_tier"] == "Generated-by"]
+    mixed = [
+        s for s in SESSIONS if s["expected_tier"] in ("Co-authored-by", "Assisted-by")
+    ]
+    rate_generated = sum(status_first(s) for s in generated) / len(generated)
+    rate_mixed = sum(status_first(s) for s in mixed) / len(mixed)
+    assert abs(rate_generated - rate_mixed) <= 0.25, (rate_generated, rate_mixed)
 
 
 def test_preexisting_hunk_shows_in_git_output_before_any_edit():
@@ -595,14 +714,14 @@ def test_formatter_hunk_is_hidden_until_it_lands():
     assert session["hunks"][tool_index] in BUILD["visible"](session, {tool_index})
 
 
-def test_status_marks_new_files_intent_to_add_and_edited_files_modified():
+def test_status_marks_new_files_untracked_and_edited_files_modified():
     hunks = [
         BUILD["hunk"]("b.py", BUILD["AI"], 1, new="x = 1"),
         BUILD["hunk"]("a.py", BUILD["AI"], 4, old="y = 1", new="y = 2"),
         BUILD["hunk"]("c.py", BUILD["AI"], 9, new="z = 3"),
     ]
     assert BUILD["render_status"](hunks) == (
-        "[Bash]\n$ git status --short\n M a.py\n A b.py\n M c.py"
+        "[Bash]\n$ git status --short\n M a.py\n?? b.py\n M c.py"
     )
 
 
@@ -625,14 +744,15 @@ def test_apply_credits_a_replaced_line_to_nobody():
     assert credit == {BUILD["HUMAN"]: ["a", "c"], BUILD["AI"]: ["B", "B2"]}
 
 
-def test_ambiguous_sessions_have_a_hunk_nobody_edited_this_session():
+def test_ambiguous_means_an_unedited_hunk_that_is_not_the_humans():
     for session in SESSIONS:
         unexplained = [
             h
             for i, h in enumerate(session["hunks"])
-            if h["by"] == BUILD["TOOL"] or i in session.get("preexisting", [])
+            if i in landed_indices(session) and h["by"] != BUILD["HUMAN"]
         ]
         assert bool(unexplained) == session["ambiguous"], session["id"]
+    assert sum(s["ambiguous"] for s in SESSIONS) == 3
 
 
 def test_new_files_diff_as_one_hunk():
@@ -642,19 +762,64 @@ def test_new_files_diff_as_one_hunk():
     ][-1]
     assert "new file mode 100644" in final_diff
     assert final_diff.count("\n@@") == 1
-    assert "@@ -0,0 +1,26 @@" in final_diff
+    assert "@@ -0,0 +1,27 @@" in final_diff
 
 
-def test_an_appended_hunk_is_not_a_new_file():
+def test_an_appended_hunk_is_not_a_new_file_and_an_edited_new_file_still_is():
     session = next(s for s in SESSIONS if s["id"] == "ts-paginate-mix")
-    final_diff = [
-        b for b in tool_blocks(BUILD["render"](session, "plain")) if is_git_diff(b)
-    ][-1]
-    test_file = final_diff.split("diff --git a/src/lib/paginate.test.ts")[1].split(
-        "diff --git"
-    )[0]
+    log = BUILD["render"](session, "plain")
+    final_diff = [b for b in tool_blocks(log) if is_git_diff(b)][-1]
+    test_file, source = final_diff.split("diff --git a/src/lib/paginate.t")[1:]
     assert "new file mode" not in test_file
-    assert "@@ -12,0 +12,3 @@" in test_file
+    assert "@@ -11,0 +12,3 @@" in test_file
+    assert "new file mode 100644" in source and "--- /dev/null" in source
+    assert "?? src/lib/paginate.ts" in log
+
+
+def test_unified_hunks_show_context_and_anchor_empty_sides_a_line_early():
+    unified = BUILD["unified"]
+    assert (
+        unified(5, ["a", "b", "c"], ["a", "B", "c"])
+        == "@@ -5,3 +5,3 @@\n a\n-b\n+B\n c"
+    )
+    assert unified(9, [], ["x", "y"]) == "@@ -8,0 +9,2 @@\n+x\n+y"
+    assert unified(9, ["x"], []) == "@@ -9 +8,0 @@\n-x"
+    assert unified(2, ["only"], ["only", "more"]) == "@@ -2 +2,2 @@\n only\n+more"
+    moved = unified(5, ["a", "b", "c", "d"], ["b", "c", "d", "a"])
+    assert moved == "@@ -5,4 +5,4 @@\n-a\n b\n c\n d\n+a"
+
+
+def test_only_the_final_diff_of_a_session_is_staged():
+    session = next(s for s in SESSIONS if s["id"] == "rust-config-carryover")
+    log = BUILD["render"](session, "plain")
+    assert log.count("$ git diff\n") == 1
+    assert log.count("$ git add -A && git diff --cached") == 1
+    assert log.index("$ git diff\n") < log.index("$ git add -A && git diff --cached")
+
+
+def test_later_hunks_shift_their_new_side_by_earlier_growth():
+    hunks = [
+        BUILD["hunk"]("a.py", BUILD["AI"], 3, old="x", new="x1\nx2\nx3"),
+        BUILD["hunk"]("a.py", BUILD["AI"], 9, old="y", new="Y"),
+        BUILD["hunk"]("a.py", BUILD["AI"], 12, new="z"),
+    ]
+    diff = BUILD["render_diff"](hunks, staged=True)
+    assert "@@ -3 +3,3 @@" in diff
+    assert "@@ -9 +11 @@" in diff
+    assert "@@ -11,0 +14 @@" in diff
+
+
+def test_unstaged_diff_hides_untracked_files_and_the_staged_one_shows_them():
+    hunks = [
+        BUILD["hunk"]("new.py", BUILD["HUMAN"], 1, new="x = 1"),
+        BUILD["hunk"]("old.py", BUILD["HUMAN"], 3, old="y = 1", new="y = 2"),
+    ]
+    unstaged = BUILD["render_diff"](hunks, staged=False)
+    assert "new.py" not in unstaged and "old.py" in unstaged
+    assert BUILD["render_diff"](hunks[:1], staged=False) == "[Bash]\n$ git diff"
+    staged = BUILD["render_diff"](hunks, staged=True)
+    assert staged.startswith("[Bash]\n$ git add -A && git diff --cached")
+    assert "new file mode 100644" in staged and "old.py" in staged
 
 
 def test_shell_edits_render_without_an_edit_block():
@@ -848,7 +1013,7 @@ def test_other_errors_are_not_retried(tmp_path, monkeypatch):
 def test_preview_states_the_constant_answer_baseline(monkeypatch, capsys):
     monkeypatch.chdir(ROOT)
     notebook_namespace(until="Run")
-    assert "Always answering Generated-by scores 0.381" in capsys.readouterr().out
+    assert "Always answering Generated-by scores 0.409" in capsys.readouterr().out
 
 
 def test_tally_reports_accuracy_by_expected_tier(capsys):
