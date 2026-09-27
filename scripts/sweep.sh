@@ -25,12 +25,25 @@ for file in task/variants/*.py; do
   SLUGS+=("$(basename "$file" .py)")
 done
 
+MAX_STATUS_FAILURES=10
+failures=0
+
 # True while any variant task has a run in flight. A status call that fails counts as
-# busy, so an outage never lets a second run start alongside the first.
+# busy, so an outage never lets a second run start alongside the first; one that keeps
+# failing (an expired login, a task never pushed) stops the sweep instead of hanging it.
 busy() {
   local slug out
   for slug in "${SLUGS[@]}"; do
-    out=$(uv run kaggle b t status "$slug" 2>&1) || return 0
+    if ! out=$(uv run kaggle b t status "$slug" 2>&1); then
+      failures=$((failures + 1))
+      echo "status of $slug failed ($failures/$MAX_STATUS_FAILURES): ${out##*$'\n'}" >&2
+      if ((failures >= MAX_STATUS_FAILURES)); then
+        echo "stopping: kaggle status keeps failing" >&2
+        exit 1
+      fi
+      return 0
+    fi
+    failures=0
     if grep -qE "Queued|Running|Pending" <<<"$out"; then
       return 0
     fi
