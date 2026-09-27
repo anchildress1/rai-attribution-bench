@@ -1179,3 +1179,13 @@ def test_a_created_file_with_a_gap_is_refused():
     ]
     with pytest.raises(ValueError, match="hunks must be contiguous"):
         BUILD["render_diff"](hunks, staged=True)
+
+
+def test_unchanged_lines_inside_a_hunk_keep_their_owner():
+    hunks = [
+        BUILD["hunk"](
+            "a.json", BUILD["HUMAN"], 3, old="  x: 1,\n},", new="  y: 2,\n},"
+        ),
+    ]
+    _, credit = BUILD["apply"](hunks)
+    assert credit == {BUILD["HUMAN"]: ["  x: 1,", "  y: 2,"]}

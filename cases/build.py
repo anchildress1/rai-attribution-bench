@@ -627,10 +627,8 @@ describe("parseDuration", () => {
                 AI,
                 73,
                 new="""\
-      "links": [
-        { "label": "Docs", "url": "https://example.com/notes/docs" },
-        { "label": "Repo", "url": "https://github.com/example/notes" }
-      ],""",
+      "docs": "https://example.com/notes/docs",
+      "repo": "https://github.com/example/notes",""",
             ),
         ],
         "turns": [
@@ -1397,29 +1395,46 @@ def apply(hunks: list[dict]) -> tuple[list[dict], dict[str, list[str]]]:
     A hunk that lands inside an earlier hunk's lines replaces them, so the diff against
     HEAD shows one region, as git would. Returns the regions and, per author, the
     lines they own at commit time: what they added and still stands, plus the HEAD
-    lines they removed. A line added and then replaced within the commit is nobody's.
+    lines they removed. Lines a hunk leaves unchanged keep their owner, and a line
+    added and then replaced within the commit is nobody's.
     """
     regions: list[dict] = []
-    credit: dict[str, list[str]] = {}
+    removed: dict[str, list[str]] = {}
     for h in sorted(hunks, key=lambda h: h["at"]):
         old, new = h["old"].splitlines(), h["new"].splitlines()
-        authored = [(line, h["by"]) for line in new]
         for region in regions:
             idx = h["at"] - region["start"]
             if 0 <= idx and idx + len(old) <= len(region["content"]):
-                replaced = [line for line, _ in region["content"][idx : idx + len(old)]]
-                if replaced != old:
+                before = region["content"][idx : idx + len(old)]
+                if [line for line, _ in before] != old:
                     raise ValueError(
                         f"{h['file']}:{h['at']} edits lines that aren't there"
                     )
-                region["content"][idx : idx + len(old)] = authored
                 break
         else:
-            regions.append({"start": h["at"], "old": old, "content": authored})
-            credit.setdefault(h["by"], []).extend(old)
+            # HEAD's lines belong to nobody in this commit.
+            region = {
+                "start": h["at"],
+                "old": old,
+                "content": [(ln, None) for ln in old],
+            }
+            regions.append(region)
+            idx, before = 0, region["content"][:]
+        after = []
+        for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new).get_opcodes():
+            if op == "equal":
+                after += before[i1:i2]
+                continue
+            removed.setdefault(h["by"], []).extend(
+                line for line, owner in before[i1:i2] if owner is None
+            )
+            after += [(line, h["by"]) for line in new[j1:j2]]
+        region["content"][idx : idx + len(old)] = after
+    credit = {by: lines[:] for by, lines in removed.items()}
     for region in regions:
         for line, by in region["content"]:
-            credit.setdefault(by, []).append(line)
+            if by is not None:
+                credit.setdefault(by, []).append(line)
     return regions, credit
 
 
