@@ -1460,6 +1460,12 @@ def test_compare_leaves_a_missing_variant_blank(tmp_path, capsys):
     }
     assert lines["pushed-only"][1] == "-"
     assert lines["full"][1:3] == ["1.000", "(1)"]
+    # Movement needs both sides: no plain run, or no push-human run, leaves it blank.
+    runs = {v: COMPARE["latest_runs"](tmp_path, v) for v in COMPARE["VARIANTS"]}
+    table = COMPARE["compare"](runs).fillna("-").to_dict("index")
+    assert table["pushed-only"]["push-ai with"] == "-"
+    assert table["full"]["push-human with"] == "-"
+    assert table["full"]["push-ai with"] == "0/0"
 
 
 def test_compare_skips_a_run_with_no_graded_rows(tmp_path):

@@ -7,7 +7,8 @@
 
 A session's answer under a variant is the tier that most of its planned samples gave,
 so two of three must agree even when a sample went ungraded. A session with no such
-majority, or a malformed one, is unsettled and never counts as movement.
+majority, or a malformed one, is unsettled and never counts as movement. A push with
+no plain run beside it, or no run of its own, leaves its movement columns blank.
 Each model's newest completed run per task is used. The download files every run under
 the task's version at download time, so which version a run used can't be checked.
 """
@@ -86,9 +87,14 @@ def compare(runs: dict[str, dict[str, Path]]) -> pd.DataFrame:
         for variant, per_case in by_variant.items():
             graded = [ok for samples in per_case.values() for _, ok in samples]
             row[variant] = f"{sum(graded) / len(graded):.3f} ({len(graded)})"
-        plain = {c: settled(s) for c, s in by_variant.get("plain", {}).items()}
+        if "plain" not in by_variant:
+            rows.append(row)
+            continue
+        plain = {c: settled(s) for c, s in by_variant["plain"].items()}
         for push, sign in PUSHES.items():
-            pushed = {c: settled(s) for c, s in by_variant.get(push, {}).items()}
+            if push not in by_variant:
+                continue
+            pushed = {c: settled(s) for c, s in by_variant[push].items()}
             end = 0 if sign < 0 else len(TIERS) - 1
             far_end = len(TIERS) - 1 - end
             moved = against = could_move = could_resist = 0
@@ -107,7 +113,8 @@ def compare(runs: dict[str, dict[str, Path]]) -> pd.DataFrame:
             row[f"{push} with"] = f"{moved}/{could_move}"
             row[f"{push} against"] = f"{against}/{could_resist}"
         rows.append(row)
-    return pd.DataFrame(rows).set_index("model")
+    moves = [f"{push} {way}" for push in PUSHES for way in ("with", "against")]
+    return pd.DataFrame(rows, columns=["model", *VARIANTS, *moves]).set_index("model")
 
 
 def main(argv: list[str]) -> None:
