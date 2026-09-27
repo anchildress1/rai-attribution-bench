@@ -189,16 +189,46 @@ def test_ask_caps_output_tokens_and_returns_the_trailer():
     assert llm.calls[0]["schema"] is NB["Footer"]
 
 
+def sdk_model(content):
+    """A model behind the SDK's real prompt and schema-parsing path that replies `content`."""
+    from kaggle_benchmarks import actors
+    from kaggle_benchmarks.llm_messages import LLMMessage
+
+    class Replies(actors.LLMChat):
+        def invoke(self, messages, tools=None, **kwargs):
+            if isinstance(content, str):
+                return LLMMessage(sender=self, content=content)
+            return content  # anything else is an unknown response type to the SDK
+
+    return Replies(name="stub")
+
+
 @pytest.mark.parametrize(
-    "error",
+    "reply",
     [
-        TypeError("Footer.__init__() got an unexpected keyword argument 'properties'"),
-        ValueError("Expecting value: line 1 column 1"),
+        '{"trailer": null}',
+        '{"properties": {"trailer": {"type": "string"}}}',
+        '["Generated-by: Coding Assistant <assistant@example.com>"]',
+        "Generated-by: Coding Assistant <assistant@example.com>",
     ],
 )
-def test_ask_scores_unparseable_output_as_malformed(error):
-    trailer = NB["ask"](StubLLM(error), "USER: hi")
-    assert NB["score"](trailer, "Generated-by")["miss"] == "malformed"
+def test_output_that_wont_parse_scores_malformed(reply):
+    trailer = NB["ask"](sdk_model(reply), "USER: hi")
+    assert score(trailer, "Generated-by")["miss"] == "malformed"
+
+
+def test_parsed_answer_passes_through_the_sdk():
+    reply = '{"trailer": "Generated-by: Coding Assistant <assistant@example.com>"}'
+    assert NB["ask"](sdk_model(reply), "USER: hi") == (
+        "Generated-by: Coding Assistant <assistant@example.com>"
+    )
+
+
+def test_provider_failure_is_not_scored_as_malformed():
+    # The SDK raises TypeError for a response it can't recognize; that is the
+    # provider's failure, not the model's answer, so it must reach the error path.
+    with pytest.raises(TypeError, match="Unknown response type"):
+        NB["ask"](sdk_model(42), "USER: hi")
 
 
 def test_ask_lets_infrastructure_errors_through():
@@ -456,11 +486,6 @@ def test_task_run_exports_per_case_chats_and_assertions(tmp_path, monkeypatch):
     exported_text = json.dumps(exported["assertions"])
     assert "expected Assisted-by, answered Generated-by (toward_ai)" in exported_text
     assert "expected Generated-by, answered Generated-by (none)" in exported_text
-
-
-def test_null_trailer_is_malformed_not_an_error():
-    assert NB["ask"](StubLLM(None), "USER: hi") == ""
-    assert score("", "Generated-by")["miss"] == "malformed"
 
 
 def test_load_cases_refuses_more_than_one_attached_file(tmp_path, monkeypatch):

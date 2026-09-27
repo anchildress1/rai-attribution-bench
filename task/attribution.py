@@ -35,11 +35,12 @@
 
 # %%
 import re
-from dataclasses import dataclass
 from pathlib import Path
 
 import kaggle_benchmarks as kbench
 import pandas as pd
+import pydantic
+from kaggle_benchmarks.prompting import ResponseParsingError
 
 # %% [markdown]
 # ## The rubric
@@ -56,7 +57,8 @@ TIERS = (
     "Generated-by",
 )
 
-# rai-lint's VIOLATION_MESSAGE (gitlint_rai/rules.py), verbatim.
+# The five rubric lines of rai-lint's VIOLATION_MESSAGE (gitlint_rai/rules.py),
+# verbatim; its header and example lines are left out.
 RUBRIC = """\
   1. "Authored-by: [Human] <contact>" - Human only, no AI
   2. "Commit-generated-by: [AI Tool] <contact>" - Trivial AI (docs, commit msg, advice)
@@ -104,8 +106,10 @@ Reply with the single trailer line only.
 MAX_OUTPUT_TOKENS = 1024
 
 
-@dataclass
-class Footer:
+# A pydantic model, not a dataclass: the SDK builds dataclasses with cls(**value), so
+# bad model output raises a bare TypeError, the same type it uses for provider
+# failures. Pydantic schemas fail as ResponseParsingError and nothing else.
+class Footer(pydantic.BaseModel):
     trailer: str
 
 
@@ -118,16 +122,13 @@ def build_prompt(session_log: str) -> str:
 def ask(llm, session_log: str) -> str:
     """Prompt for the trailer; an answer that won't parse into `Footer` comes back empty."""
     try:
-        return (
-            llm.prompt(
-                build_prompt(session_log),
-                schema=Footer,
-                extra_api_params={"max_completion_tokens": MAX_OUTPUT_TOKENS},
-            ).trailer
-            or ""
-        )
-    except (TypeError, ValueError):
-        # Output that won't parse into Footer is the model breaking format.
+        return llm.prompt(
+            build_prompt(session_log),
+            schema=Footer,
+            extra_api_params={"max_completion_tokens": MAX_OUTPUT_TOKENS},
+        ).trailer
+    except ResponseParsingError:
+        # The model broke format; every other exception is the platform's.
         return ""
 
 
