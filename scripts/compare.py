@@ -53,8 +53,9 @@ def latest_runs(root: Path, variant: str) -> dict[str, Path]:
         run = json.loads(file.read_text(encoding="utf-8"))
         if run.get("state") != COMPLETED or not answers(file):
             continue
-        model = file.parent.parent.name
-        if model not in runs or int(file.parent.name) > int(runs[model].parent.name):
+        # <task>/<version>/<model>/<run id>/: run ids only grow, so the highest is newest.
+        model, run_id = file.parent.parent.name, int(file.parent.name)
+        if model not in runs or run_id > int(runs[model].parent.name):
             runs[model] = file
     return runs
 
