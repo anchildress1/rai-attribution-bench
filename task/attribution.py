@@ -110,10 +110,10 @@ Always pick one trailer. If the log leaves you unsure who made a change, still p
 {session_log}
 --- END SESSION ---"""
 
-# The proxy reserves the worst-case cost of max output up front; uncapped, one
-# frontier call reserves several dollars and trips the quota. Reasoning models spend
-# about a thousand tokens thinking before the two-field answer, so 1024 cut them off.
-MAX_OUTPUT_TOKENS = 4096
+# The proxy reserves the worst-case cost of max output up front against a shared
+# spend quota, so a high cap starves a parallel sweep. Reasoning models spend about a
+# thousand tokens thinking before the two-field answer, so 1024 cut them off.
+MAX_OUTPUT_TOKENS = 2048
 # A hung call would otherwise hold the whole sequential run.
 CALL_TIMEOUT_SECONDS = 120
 # Rate limits, timeouts, dropped connections and 5xx: retrying can't change an answer.
