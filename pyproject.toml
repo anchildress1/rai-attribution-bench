@@ -5,7 +5,9 @@ requires-python = ">=3.12"
 dependencies = [
     "kaggle>=2.2.4",
     "kaggle-benchmarks>=0.6.1",
+    "openai>=3.19.2",
     "pandas>=3.0.6",
+    "pydantic>=2.13.5",
 ]
 
 [dependency-groups]

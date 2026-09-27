@@ -2596,7 +2596,9 @@ source = { virtual = "." }
 dependencies = [
     { name = "kaggle" },
     { name = "kaggle-benchmarks" },
+    { name = "openai" },
     { name = "pandas" },
+    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -2608,7 +2610,9 @@ dev = [
 requires-dist = [
     { name = "kaggle", specifier = ">=2.2.4" },
     { name = "kaggle-benchmarks", specifier = ">=0.6.1" },
+    { name = "openai", specifier = ">=3.19.2" },
     { name = "pandas", specifier = ">=3.0.6" },
+    { name = "pydantic", specifier = ">=2.13.5" },
 ]
 
 [package.metadata.requires-dev]
