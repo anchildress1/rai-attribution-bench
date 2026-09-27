@@ -645,11 +645,11 @@ class TTLCache:
         return entry[1]
 ```
 
-Can you write `set`, including eviction when it's full?""",
+Can you write `set`, including eviction when it's full, and a `delete`?""",
             ),
             (
                 "ASSISTANT",
-                r"""Here's `set`. It drops expired entries first, then the oldest one if it's still full.
+                r"""Here's `set`, which drops expired entries first and then the oldest one if it's still full, plus `delete`.
 
 ```python
     def set(self, key: str, value: object) -> None:
@@ -660,6 +660,9 @@ Can you write `set`, including eviction when it's full?""",
             oldest = min(self._data, key=lambda k: self._data[k][0])
             del self._data[oldest]
         self._data[key] = (now + self.ttl, value)
+
+    def delete(self, key: str) -> None:
+        self._data.pop(key, None)
 ```""",
             ),
         ],
@@ -718,6 +721,10 @@ export function validatePassword(value) {
   if (!/\d/.test(value)) return "Include a number";
   return null;
 }
+
+export function validateName(value) {
+  return value.trim() ? null : "Enter your name";
+}
 ```
 
 Wire them into the form and show the errors under each field.""",
@@ -728,10 +735,11 @@ Wire them into the form and show the errors under each field.""",
 
 ```js
 // src/signup/form.js
-import { validateEmail, validatePassword } from "./validate.js";
+import { validateEmail, validateName, validatePassword } from "./validate.js";
 
 form.addEventListener("submit", (event) => {
   const errors = {
+    name: validateName(form.name.value),
     email: validateEmail(form.email.value),
     password: validatePassword(form.password.value),
   };
@@ -750,11 +758,12 @@ form.addEventListener("submit", (event) => {
         "turns": [
             (
                 "USER",
-                r"""I defined the CLI arguments:
+                r"""I defined the CLI arguments and the filter:
 
 ```rust
 // src/cli.rs
 use clap::Parser;
+use std::fs::Metadata;
 
 #[derive(Parser)]
 pub struct Args {
@@ -764,9 +773,13 @@ pub struct Args {
     #[arg(long, default_value_t = 10_000_000)]
     pub max_size: u64,
 }
+
+pub fn keep(meta: &Metadata, max_size: u64) -> bool {
+    meta.is_file() && meta.len() <= max_size
+}
 ```
 
-Write main so it walks `root` and prints each file under `max_size` with its size.""",
+Write main so it walks `root` and prints each file that passes `keep`, with its size.""",
             ),
             (
                 "ASSISTANT",
@@ -783,7 +796,7 @@ fn main() {
     let args = cli::Args::parse();
     for entry in WalkDir::new(&args.root).into_iter().filter_map(Result::ok) {
         let Ok(meta) = entry.metadata() else { continue };
-        if meta.is_file() && meta.len() <= args.max_size {
+        if cli::keep(&meta, args.max_size) {
             println!("{}\t{}", meta.len(), entry.path().display());
         }
     }

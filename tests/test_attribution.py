@@ -1,5 +1,6 @@
 import json
 import re
+import runpy
 from collections import Counter
 from pathlib import Path
 
@@ -238,3 +239,50 @@ class TestCases:
             "expected_tier",
         ]
         assert len(df) == 40
+
+
+FENCE = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
+PROSE_FENCES = {"", "markdown"}
+COMMENT_PREFIXES = ("//", "--", "# ")
+
+
+def code_lines(text: str) -> int:
+    """Count non-blank, non-comment lines inside code fences; docs and messages don't count."""
+    count = 0
+    for lang, body in FENCE.findall(text):
+        if lang in PROSE_FENCES:
+            continue
+        for line in body.splitlines():
+            stripped = line.strip()
+            if (
+                stripped
+                and stripped != "#"
+                and not stripped.startswith(COMMENT_PREFIXES)
+            ):
+                count += 1
+    return count
+
+
+def authorship(session: dict) -> tuple[int, int]:
+    human = sum(code_lines(text) for who, text in session["turns"] if who == "USER")
+    ai = sum(code_lines(text) for who, text in session["turns"] if who == "ASSISTANT")
+    return human, ai
+
+
+SESSIONS = runpy.run_path(str(ROOT / "cases" / "build.py"))["SESSIONS"]
+
+
+@pytest.mark.parametrize("session", SESSIONS, ids=lambda s: s["id"])
+def test_expected_tier_matches_who_wrote_the_code(session):
+    human, ai = authorship(session)
+    share = ai / (human + ai)
+    # Bands sit inside rai-lint's wording with margin, so no case rides an edge.
+    match session["expected_tier"]:
+        case "Generated-by":
+            assert human == 0, share
+        case "Co-authored-by":
+            assert 0.45 <= share <= 0.55, share
+        case "Assisted-by":
+            assert share <= 0.30, share
+        case "Commit-generated-by":
+            assert ai == 0, share
