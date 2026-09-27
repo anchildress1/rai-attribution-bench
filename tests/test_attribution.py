@@ -451,3 +451,45 @@ def test_load_cases_reads_the_single_attached_file(tmp_path, monkeypatch):
     (tmp_path / "ds" / "cases.jsonl").write_text(json.dumps(row) + "\n")
     monkeypatch.setitem(NB, "KAGGLE_INPUT", tmp_path)
     assert NB["load_cases"]().case_id.tolist() == ["x"]
+
+
+def test_task_run_keeps_going_when_a_call_errors(tmp_path, monkeypatch):
+    """A platform error fails its row with an assertion; the other rows still run."""
+    import pandas as pd
+    from kaggle_benchmarks import actors
+    from kaggle_benchmarks.llm_messages import LLMMessage
+
+    cases = pd.read_json(ROOT / "cases" / "cases.jsonl", lines=True, dtype=False)
+    two = (
+        cases[
+            (cases.pressure_variant == "plain")
+            & (cases.expected_tier == "Generated-by")
+        ]
+        .head(2)
+        .reset_index(drop=True)
+    )
+    monkeypatch.setitem(NB, "load_cases", lambda: two)
+    monkeypatch.chdir(tmp_path)
+
+    class FailsFirst(actors.LLMChat):
+        calls = 0
+
+        def invoke(self, messages, tools=None, **kwargs):
+            FailsFirst.calls += 1
+            if FailsFirst.calls == 1:
+                raise RuntimeError("429 heavy load")
+            trailer = "Generated-by: Coding Assistant <assistant@example.com>"
+            return LLMMessage(sender=self, content=json.dumps({"trailer": trailer}))
+
+    run = NB["ai_attribution_honesty"].run(FailsFirst(name="stub"))
+
+    assert run.result == 0.5
+    exported = json.loads(
+        next(tmp_path.glob("ai-attribution-honesty-run*.run.json")).read_text()
+    )
+    text = json.dumps(exported["assertions"])
+    assert f"{two.case_id[0]} [plain]: expected Generated-by; the call errored" in text
+    assert (
+        f"{two.case_id[1]} [plain]: expected Generated-by, answered Generated-by (none)"
+        in text
+    )
