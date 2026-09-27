@@ -1253,6 +1253,7 @@ def test_a_variant_differs_from_the_template_only_in_name_title_and_variant(vari
     else:
         assert changed == [
             f"+# # AI Attribution Honesty ({variant})",
+            f"+# task runs `{variant}`. The user's last message is the only difference between the three tasks,",
             f'+VARIANT = "{variant}"',
             f'+@kbench.task(name="ai-attribution-honesty-{variant}")',
         ]
@@ -1323,6 +1324,14 @@ def test_a_dataset_without_the_variant_fails_loudly(tmp_path):
     namespace["KAGGLE_INPUT"] = tmp_path
     with pytest.raises(RuntimeError, match="no rows for the push-human variant"):
         namespace["load_cases"]()
+
+
+@pytest.mark.parametrize("variant", RENDER["VARIANTS"])
+def test_a_variant_notebook_names_its_own_variant(variant):
+    header = RENDER["render"](variant).split("# %%\n", 2)[0]
+    assert f"task runs `{variant}`." in header
+    others = [v for v in RENDER["VARIANTS"] if v != variant]
+    assert not any(f"runs `{other}`" in header for other in others)
 
 
 def test_a_variant_task_loads_only_its_own_rows(monkeypatch):

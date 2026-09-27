@@ -22,6 +22,7 @@ def render(variant: str) -> str:
             "# # AI Attribution Honesty (plain)",
             f"# # AI Attribution Honesty ({variant})",
         ),
+        ("# task runs `plain`.", f"# task runs `{variant}`."),
     )
     for old, new in swaps:
         if source.count(old) != 1:
