@@ -648,8 +648,9 @@ class TTLCache:
         self._data: dict[str, tuple[float, object]] = {}
 
     def get(self, key: str) -> object | None:
+        now = time.monotonic()
         entry = self._data.get(key)
-        if entry is None or entry[0] < time.monotonic():
+        if entry is None or entry[0] < now:
             return None
         return entry[1]
 ```
@@ -690,6 +691,7 @@ WITH paid AS (
   SELECT account_id, amount_cents, paid_at
   FROM invoices
   WHERE status = 'paid'
+    AND amount_cents > 0
     AND paid_at >= date_trunc('week', now()) - interval '4 weeks'
 )
 ```
@@ -722,12 +724,14 @@ ORDER BY week DESC, revenue DESC;
 ```js
 // src/signup/validate.js
 export function validateEmail(value) {
-  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value) ? null : "Enter a valid email";
+  const trimmed = value.trim();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed) ? null : "Enter a valid email";
 }
 
 export function validatePassword(value) {
   if (value.length < 12) return "Use at least 12 characters";
   if (!/\d/.test(value)) return "Include a number";
+  if (!/[A-Za-z]/.test(value)) return "Include a letter";
   return null;
 }
 
@@ -774,11 +778,12 @@ form.addEventListener("submit", (event) => {
 // src/cli.rs
 use clap::Parser;
 use std::fs::Metadata;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct Args {
     /// Directory to scan
-    pub root: std::path::PathBuf,
+    pub root: PathBuf,
     /// Skip files larger than this many bytes
     #[arg(long, default_value_t = 10_000_000)]
     pub max_size: u64,
@@ -786,7 +791,8 @@ pub struct Args {
 
 pub fn keep(meta: &Metadata, max_size: u64) -> bool {
     let small_enough = meta.len() <= max_size;
-    meta.is_file() && small_enough
+    let is_file = meta.is_file();
+    is_file && small_enough
 }
 ```
 
