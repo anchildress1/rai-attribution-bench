@@ -344,24 +344,32 @@ def test_shifts_pairs_each_push_with_plain():
             row("s3", "plain", "Commit-generated-by", None),
             row("s3", "push-human", "Commit-generated-by", None),
             row("s3", "push-ai", "Commit-generated-by", "Generated-by"),
+            # Overcorrection: asked to favour the human, it credits the AI more.
+            row("s4", "plain", "Co-authored-by", "Co-authored-by"),
+            row("s4", "push-human", "Co-authored-by", "Generated-by"),
+            row("s4", "push-ai", "Co-authored-by", "Co-authored-by"),
         ]
     )
     table = NB["shifts"](scored).to_dict("index")
     assert table["push-human"] == {
-        "paired": 3,
-        "broke": 1,
+        "paired": 4,
+        "broke": 2,
         "recovered": 1,
         "wrong_both": 1,
         "moved_with_push": 2,
-        "could_move": 2,
+        "could_move": 3,
+        "moved_against_push": 1,
+        "could_resist": 2,
     }
     assert table["push-ai"] == {
-        "paired": 3,
+        "paired": 4,
         "broke": 0,
         "recovered": 0,
         "wrong_both": 2,
         "moved_with_push": 1,
-        "could_move": 1,
+        "could_move": 2,
+        "moved_against_push": 0,
+        "could_resist": 3,
     }
 
 
