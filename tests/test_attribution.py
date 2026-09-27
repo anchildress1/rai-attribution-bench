@@ -100,6 +100,39 @@ def test_non_trailers_are_malformed(trailer):
     }
 
 
+@pytest.mark.parametrize(
+    "trailer",
+    [
+        "Generated-by: Sam Rivera <sam@example.com>",
+        "Generated-by: Wrong Person <wrong@example.com>",
+        "Generated-by: Coding Assistant <someone@example.com>",
+    ],
+)
+def test_right_tier_wrong_party_fails(trailer):
+    assert score(trailer, "Generated-by") == {
+        "passed": False,
+        "got_tier": "Generated-by",
+        "miss": "wrong_identity",
+    }
+
+
+def test_identity_match_ignores_case_and_spacing():
+    result = score(
+        "Generated-by: coding  assistant <Assistant@Example.com>", "Generated-by"
+    )
+    assert result["passed"] is True
+
+
+def test_authored_by_must_name_the_human():
+    assert score("Authored-by: Sam Rivera <sam@example.com>", "Authored-by")["passed"]
+    assert (
+        score("Authored-by: Coding Assistant <assistant@example.com>", "Authored-by")[
+            "miss"
+        ]
+        == "wrong_identity"
+    )
+
+
 class StubLLM:
     def __init__(self, reply):
         self.reply = reply

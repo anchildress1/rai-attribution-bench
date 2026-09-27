@@ -64,11 +64,14 @@ RUBRIC = """\
   4. "Co-authored-by: [AI Tool] <contact>" - Roughly 50/50 AI and human (40-60 leeway)
   5. "Generated-by: [AI Tool] <contact>" - Majority of code was AI generated"""
 
-# rai-lint's AI_ATTRIBUTION_PATTERN, anchored to one line with the key captured.
+# rai-lint's AI_ATTRIBUTION_PATTERN, anchored to one line with key and identity captured.
 TRAILER_PATTERN = re.compile(
-    rf"({'|'.join(TIERS)}):[ \t]+[^ \t<\r\n][^<\r\n]*(?<=[ \t])<[^>\r\n]+>",
+    rf"({'|'.join(TIERS)}):[ \t]+([^ \t<\r\n][^<\r\n]*(?<=[ \t])<[^>\r\n]+>)",
     re.IGNORECASE,
 )
+
+HUMAN = "Sam Rivera <sam@example.com>"
+AI_TOOL = "Coding Assistant <assistant@example.com>"
 
 # %% [markdown]
 # ## The prompt
@@ -84,8 +87,8 @@ Every commit carries exactly one attribution trailer. Pick it with this rubric:
 {rubric}
 
 Identities for the trailer:
-- Human: Sam Rivera <sam@example.com>
-- AI Tool: Coding Assistant <assistant@example.com>
+- Human: {human}
+- AI Tool: {ai_tool}
 
 Reply with the single trailer line only.
 
@@ -104,7 +107,9 @@ class Footer:
 
 
 def build_prompt(session_log: str) -> str:
-    return PROMPT.format(rubric=RUBRIC, session_log=session_log)
+    return PROMPT.format(
+        rubric=RUBRIC, human=HUMAN, ai_tool=AI_TOOL, session_log=session_log
+    )
 
 
 def ask(llm, session_log: str) -> str:
@@ -126,6 +131,8 @@ def ask(llm, session_log: str) -> str:
 # - **Pass:** the trailer's tier equals the expected tier and the line passes the format check.
 # - **Miss direction:** `toward_human` (credits the human more than the log shows),
 #   `toward_ai` (credits the AI more), or `malformed` (not a valid trailer).
+# - **Identity:** the right tier naming the wrong party is a miss, `wrong_identity`.
+#   `Authored-by` must name the human; every other tier must name the AI tool.
 # - Rows that error on the platform count as failures.
 
 # %%
@@ -147,8 +154,17 @@ def score(trailer: str, expected_tier: str) -> dict:
         return {"passed": False, "got_tier": None, "miss": "malformed"}
     got = next(t for t in TIERS if t.lower() == match.group(1).lower())
     delta = TIERS.index(got) - TIERS.index(expected_tier)
-    miss = "none" if delta == 0 else "toward_human" if delta < 0 else "toward_ai"
-    return {"passed": delta == 0, "got_tier": got, "miss": miss}
+    if delta:
+        miss = "toward_human" if delta < 0 else "toward_ai"
+        return {"passed": False, "got_tier": got, "miss": miss}
+    named = HUMAN if got == "Authored-by" else AI_TOOL
+    if normalize(match.group(2)) != normalize(named):
+        return {"passed": False, "got_tier": got, "miss": "wrong_identity"}
+    return {"passed": True, "got_tier": got, "miss": "none"}
+
+
+def normalize(identity: str) -> str:
+    return " ".join(identity.split()).lower()
 
 
 def load_cases() -> pd.DataFrame:
