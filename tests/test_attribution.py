@@ -231,6 +231,18 @@ def test_missing_or_null_question_never_costs_the_row(reply):
     assert score(footer.trailer, "Generated-by")["passed"]
 
 
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [("false", ""), ("0", ""), ('["Whose is cache.py?"]', "['Whose is cache.py?']")],
+)
+def test_a_question_that_is_not_text_never_costs_the_row(question, expected):
+    trailer = "Generated-by: Coding Assistant <assistant@example.com>"
+    reply = f'{{"trailer": "{trailer}", "question": {question}}}'
+    footer = NB["ask"](sdk_model(reply), "USER: hi")
+    assert footer.question == expected
+    assert score(footer.trailer, "Generated-by")["passed"]
+
+
 def test_parsed_answer_passes_through_the_sdk():
     reply = json.dumps(
         {
@@ -1158,3 +1170,4 @@ def test_an_insertion_at_the_top_of_a_tracked_file_is_not_a_new_file():
 def test_a_created_hunk_must_start_an_empty_file(at, old):
     with pytest.raises(ValueError, match="created file starts at line 1"):
         BUILD["hunk"]("a.py", BUILD["AI"], at, old=old, new="y = 2", created=True)
+

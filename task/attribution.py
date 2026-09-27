@@ -132,13 +132,16 @@ RETRY_DELAY_SECONDS = 10
 # failures. Pydantic schemas fail as ResponseParsingError and nothing else.
 class Footer(pydantic.BaseModel):
     trailer: str
-    # Models write null or drop the field for "no question"; neither may cost the row.
+    # Models write null, false or a list here, or drop the field; none of that may cost
+    # the row, so anything that isn't text is read as no question or as its text.
     question: str = ""
 
     @pydantic.field_validator("question", mode="before")
     @classmethod
-    def none_is_empty(cls, value):
-        return "" if value is None else value
+    def as_text(cls, value):
+        if not value:
+            return ""
+        return value if isinstance(value, str) else str(value)
 
 
 def build_prompt(session_log: str) -> str:
