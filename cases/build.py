@@ -1483,8 +1483,12 @@ def render_diff(hunks: list[dict], staged: bool) -> str:
         else:
             out.append(f"--- a/{file}")
         out.append(f"+++ b/{file}")
+        regions = apply(in_file)[0]
+        if new_file and len(regions) > 1:
+            # A new file has no old lines for a second hunk to sit between.
+            raise ValueError(f"{file}: a created file's hunks must be contiguous")
         delta = 0
-        for region in apply(in_file)[0]:
+        for region in regions:
             added = [line for line, _ in region["content"]]
             out.append(unified(region["start"], region["old"], added, delta))
             delta += len(added) - len(region["old"])

@@ -1171,3 +1171,11 @@ def test_a_created_hunk_must_start_an_empty_file(at, old):
     with pytest.raises(ValueError, match="created file starts at line 1"):
         BUILD["hunk"]("a.py", BUILD["AI"], at, old=old, new="y = 2", created=True)
 
+
+def test_a_created_file_with_a_gap_is_refused():
+    hunks = [
+        BUILD["hunk"]("n.py", BUILD["AI"], 1, new="a\nb", created=True),
+        BUILD["hunk"]("n.py", BUILD["AI"], 20, new="z"),
+    ]
+    with pytest.raises(ValueError, match="hunks must be contiguous"):
+        BUILD["render_diff"](hunks, staged=True)
