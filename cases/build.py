@@ -34,8 +34,22 @@ AI = "ai"
 TOOL = "tool"
 
 
-def hunk(file: str, by: str, at: int, old: str = "", new: str = "") -> dict:
-    return {"file": file, "by": by, "at": at, "old": old, "new": new}
+def hunk(
+    file: str, by: str, at: int, old: str = "", new: str = "", created: bool = False
+) -> dict:
+    """One change in the working tree; `created` marks the hunk that brings a file into being."""
+    if created and (at != 1 or old):
+        raise ValueError(
+            f"{file}: a created file starts at line 1 with nothing removed"
+        )
+    return {
+        "file": file,
+        "by": by,
+        "at": at,
+        "old": old,
+        "new": new,
+        "created": created,
+    }
 
 
 # Each session lists every hunk in the working tree at commit time. Hunks the assistant
@@ -123,6 +137,7 @@ SESSIONS = [
                 "src/hooks/useDebounce.ts",
                 AI,
                 1,
+                created=True,
                 new="""\
 import { useEffect, useState } from "react";
 
@@ -181,6 +196,7 @@ export function useDebounce<T>(value: T, delayMs: number): T {
                 "migrations/0042_projects_archived_at.sql",
                 AI,
                 1,
+                created=True,
                 new="""\
 ALTER TABLE projects ADD COLUMN archived_at timestamptz;
 CREATE INDEX projects_active_idx ON projects (owner_id) WHERE archived_at IS NULL;""",
@@ -376,6 +392,7 @@ var plan bool""",
                 "src/middleware/requestId.js",
                 AI,
                 1,
+                created=True,
                 new="""\
 import { randomUUID } from "node:crypto";
 
@@ -527,6 +544,7 @@ app.use(requestId);""",
                 "src/parse.test.ts",
                 AI,
                 1,
+                created=True,
                 new="""\
 import { describe, expect, it } from "vitest";
 import { parseDuration } from "./parse";
@@ -648,6 +666,7 @@ describe("parseDuration", () => {
                 "src/cache.py",
                 HUMAN,
                 1,
+                created=True,
                 new="""\
 import time
 
@@ -716,6 +735,7 @@ class TTLCache:
                 "src/lib/paginate.ts",
                 HUMAN,
                 1,
+                created=True,
                 new="""\
 export interface Page<T> {
   items: T[];
@@ -783,6 +803,7 @@ it("clamps a page past the end to the last page", () => {
                 "reports/weekly_revenue.sql",
                 HUMAN,
                 1,
+                created=True,
                 new="""\
 WITH paid AS (
   SELECT account_id, amount_cents, paid_at
@@ -903,6 +924,7 @@ ORDER BY week DESC, revenue DESC;""",
                 "internal/http/health.go",
                 HUMAN,
                 1,
+                created=True,
                 new="""\
 package http
 
@@ -933,6 +955,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
                 "internal/http/health_test.go",
                 AI,
                 1,
+                created=True,
                 new="""\
 package http
 
@@ -1036,6 +1059,7 @@ func TestHealth(t *testing.T) {
                 "app/importers/users.py",
                 HUMAN,
                 1,
+                created=True,
                 new="""\
 import csv
 from dataclasses import dataclass
@@ -1158,6 +1182,7 @@ pub fn keep(meta: &Metadata, max_size: u64) -> bool {
                 ".github/workflows/release.yml",
                 HUMAN,
                 1,
+                created=True,
                 new="""\
 name: release
 on:
@@ -1223,6 +1248,7 @@ jobs:
                 "tools/dedupe.py",
                 HUMAN,
                 1,
+                created=True,
                 new="""\
 import hashlib
 import sys
@@ -1405,9 +1431,7 @@ def by_file(hunks: list[dict]) -> dict[str, list[dict]]:
 
 
 def is_new_file(hunks: list[dict]) -> bool:
-    # The file starts at line 1 with nothing to replace; later hunks may edit inside it.
-    first = min(hunks, key=lambda h: h["at"])
-    return first["at"] == 1 and not first["old"]
+    return any(h["created"] for h in hunks)
 
 
 def render_edit(h: dict) -> str:

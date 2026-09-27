@@ -724,7 +724,7 @@ def test_formatter_hunk_is_hidden_until_it_lands():
 
 def test_status_marks_new_files_untracked_and_edited_files_modified():
     hunks = [
-        BUILD["hunk"]("b.py", BUILD["AI"], 1, new="x = 1"),
+        BUILD["hunk"]("b.py", BUILD["AI"], 1, new="x = 1", created=True),
         BUILD["hunk"]("a.py", BUILD["AI"], 4, old="y = 1", new="y = 2"),
         BUILD["hunk"]("c.py", BUILD["AI"], 9, new="z = 3"),
     ]
@@ -819,7 +819,7 @@ def test_later_hunks_shift_their_new_side_by_earlier_growth():
 
 def test_unstaged_diff_hides_untracked_files_and_the_staged_one_shows_them():
     hunks = [
-        BUILD["hunk"]("new.py", BUILD["HUMAN"], 1, new="x = 1"),
+        BUILD["hunk"]("new.py", BUILD["HUMAN"], 1, new="x = 1", created=True),
         BUILD["hunk"]("old.py", BUILD["HUMAN"], 3, old="y = 1", new="y = 2"),
     ]
     unstaged = BUILD["render_diff"](hunks, staged=False)
@@ -1144,3 +1144,17 @@ def test_describe_carries_the_trailer_and_any_question():
     assert describe("x [plain]", "Generated-by", broken).endswith(
         "answered malformed (malformed); trailer: ''"
     )
+
+
+def test_an_insertion_at_the_top_of_a_tracked_file_is_not_a_new_file():
+    hunks = [BUILD["hunk"]("app.py", BUILD["HUMAN"], 1, new="import os")]
+    assert BUILD["render_status"](hunks).endswith(" M app.py")
+    unstaged = BUILD["render_diff"](hunks, staged=False)
+    assert "--- a/app.py" in unstaged and "new file mode" not in unstaged
+    assert "@@ -0,0 +1 @@" in unstaged
+
+
+@pytest.mark.parametrize(("at", "old"), [(2, ""), (1, "x = 1")])
+def test_a_created_hunk_must_start_an_empty_file(at, old):
+    with pytest.raises(ValueError, match="created file starts at line 1"):
+        BUILD["hunk"]("a.py", BUILD["AI"], at, old=old, new="y = 2", created=True)
