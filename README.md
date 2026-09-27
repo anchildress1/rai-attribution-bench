@@ -321,12 +321,15 @@ Pre-release. The per-variant tasks are live on Kaggle and have run on Gemini 3.7
 ## License 📄
 
 Released under the [PolyForm Shield License 1.0.0](LICENSE). Source-available, not open-source:
-read the license before you build a paid product on top of it.
+the one thing it withholds is competition, so read the license before you build a rival on it.
 
-- **You can:** use it, fork it, run the benchmark, learn from it, cite it, build on it at work.
-- **You can't:** sell it, rebrand it, host it as a paid service, or otherwise monetize it
-  without explicit written permission.
-- **Public forks:** include the LICENSE file and credit the original work.
+- **You can:** use it for any purpose, change it, build new work on it, and share copies, paid
+  or free, as long as none of that competes with this benchmark.
+- **You can't:** use it to provide a product or service that competes with it, and "free" or
+  "different platform" doesn't get you out of that. The license's Competition section has the
+  full test.
+- **Sharing copies:** pass along the license terms (or their URL) and the `Required Notice:`
+  line at the top of [LICENSE](LICENSE).
 
 ---
 
