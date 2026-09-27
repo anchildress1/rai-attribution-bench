@@ -35,9 +35,11 @@
 
 # %%
 import re
+import time
 from pathlib import Path
 
 import kaggle_benchmarks as kbench
+import openai
 import pandas as pd
 import pydantic
 from kaggle_benchmarks.prompting import ResponseParsingError
@@ -104,6 +106,17 @@ Reply with the single trailer line only.
 # The proxy reserves the worst-case cost of max output up front; uncapped, one
 # frontier call reserves several dollars and trips the quota.
 MAX_OUTPUT_TOKENS = 1024
+# A hung call would otherwise hold the whole sequential run.
+CALL_TIMEOUT_SECONDS = 120
+# Rate limits, timeouts, dropped connections and 5xx: retrying can't change an answer.
+TRANSIENT_ERRORS = (
+    openai.RateLimitError,
+    openai.APITimeoutError,
+    openai.APIConnectionError,
+    openai.InternalServerError,
+)
+MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 10
 
 
 # A pydantic model, not a dataclass: the SDK builds dataclasses with cls(**value), so
@@ -125,11 +138,28 @@ def ask(llm, session_log: str) -> str:
         return llm.prompt(
             build_prompt(session_log),
             schema=Footer,
-            extra_api_params={"max_completion_tokens": MAX_OUTPUT_TOKENS},
+            extra_api_params={
+                "max_completion_tokens": MAX_OUTPUT_TOKENS,
+                "timeout": CALL_TIMEOUT_SECONDS,
+            },
         ).trailer
     except ResponseParsingError:
         # The model broke format; every other exception is the platform's.
         return ""
+
+
+def ask_with_retries(llm, session_log: str, label: str) -> str:
+    """Ask, retrying transient platform errors, each attempt in its own named chat."""
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        name = label if attempt == 1 else f"{label} (attempt {attempt})"
+        with kbench.chats.new(name):
+            try:
+                return ask(llm, session_log)
+            except TRANSIENT_ERRORS:
+                if attempt == MAX_ATTEMPTS:
+                    raise
+        time.sleep(RETRY_DELAY_SECONDS * attempt)
+    raise AssertionError("unreachable: the last attempt returns or raises")
 
 
 # %% [markdown]
@@ -144,7 +174,8 @@ def ask(llm, session_log: str) -> str:
 #   answers that broke, answers that recovered, and moves in the pushed direction out
 #   of the sessions that still had room to move that way. Malformed answers have no
 #   tier, so they never count as movement; `paired` counts the sessions compared.
-# - Rows that error on the platform count as failures.
+# - Rows that error on the platform count as failures. Rate limits, timeouts, dropped
+#   connections and 5xx are retried up to 3 times first, each attempt in its own chat.
 
 # %%
 RESULT_COLUMNS = [
@@ -279,17 +310,16 @@ def ai_attribution_honesty(llm) -> float:
     results, errors = [], []
     for case in cases.itertuples():
         label = f"{case.case_id} [{case.pressure_variant}]"
-        with kbench.chats.new(label):
-            try:
-                trailer = ask(llm, case.session_log)
-            except Exception as error:  # noqa: BLE001
-                # A platform error (quota, overload, missing model) fails the row
-                # loudly but must not stop the remaining rows.
-                errors.append(f"{label}: {error}")
-                kbench.assertions.assert_fail(
-                    expectation=f"{label}: expected {case.expected_tier}; the call errored"
-                )
-                continue
+        try:
+            trailer = ask_with_retries(llm, case.session_log, label)
+        except Exception as error:  # noqa: BLE001
+            # A platform error (quota, overload, missing model) fails the row
+            # loudly but must not stop the remaining rows.
+            errors.append(f"{label}: {error}")
+            kbench.assertions.assert_fail(
+                expectation=f"{label}: expected {case.expected_tier}; the call errored"
+            )
+            continue
         result = {
             "case_id": case.case_id,
             "pressure_variant": case.pressure_variant,

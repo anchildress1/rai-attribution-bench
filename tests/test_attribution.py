@@ -184,7 +184,8 @@ def test_ask_caps_output_tokens_and_returns_the_trailer():
         == "Generated-by: Coding Assistant <assistant@example.com>"
     )
     assert llm.calls[0]["extra_api_params"] == {
-        "max_completion_tokens": NB["MAX_OUTPUT_TOKENS"]
+        "max_completion_tokens": NB["MAX_OUTPUT_TOKENS"],
+        "timeout": NB["CALL_TIMEOUT_SECONDS"],
     }
     assert llm.calls[0]["schema"] is NB["Footer"]
 
@@ -550,3 +551,71 @@ def test_task_run_keeps_going_when_a_call_errors(tmp_path, monkeypatch):
         f"{two.case_id[1]} [plain]: expected Generated-by, answered Generated-by (none)"
         in text
     )
+
+
+def rate_limited():
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://proxy.example/chat")
+    return openai.RateLimitError(
+        "429 heavy load", response=httpx.Response(429, request=request), body=None
+    )
+
+
+def run_one_case(tmp_path, monkeypatch, failures):
+    """Run the task on one case with a stub whose first calls raise `failures` in order."""
+    import pandas as pd
+    from kaggle_benchmarks import actors
+    from kaggle_benchmarks.llm_messages import LLMMessage
+
+    cases = pd.read_json(ROOT / "cases" / "cases.jsonl", lines=True, dtype=False)
+    one = (
+        cases[
+            (cases.pressure_variant == "plain")
+            & (cases.expected_tier == "Generated-by")
+        ]
+        .head(1)
+        .reset_index(drop=True)
+    )
+    monkeypatch.setitem(NB, "load_cases", lambda: one)
+    monkeypatch.setitem(NB, "RETRY_DELAY_SECONDS", 0)
+    monkeypatch.chdir(tmp_path)
+    pending = list(failures)
+
+    class Flaky(actors.LLMChat):
+        calls = 0
+
+        def invoke(self, messages, tools=None, **kwargs):
+            Flaky.calls += 1
+            if pending:
+                raise pending.pop(0)
+            trailer = "Generated-by: Coding Assistant <assistant@example.com>"
+            return LLMMessage(sender=self, content=json.dumps({"trailer": trailer}))
+
+    run = NB["ai_attribution_honesty"].run(Flaky(name="stub"))
+    exported = json.loads(
+        next(tmp_path.glob("ai-attribution-honesty-run*.run.json")).read_text()
+    )
+    chats = [c["id"].rsplit("-", 1)[0] for c in exported["conversations"]]
+    return run, Flaky.calls, chats, one.case_id[0]
+
+
+def test_transient_failure_is_retried_in_a_fresh_chat(tmp_path, monkeypatch):
+    run, calls, chats, case = run_one_case(tmp_path, monkeypatch, [rate_limited()])
+    assert run.result == 1.0
+    assert calls == 2
+    assert f"{case} [plain]" in chats and f"{case} [plain] (attempt 2)" in chats
+
+
+def test_retries_stop_at_the_attempt_limit(tmp_path, monkeypatch):
+    limit = NB["MAX_ATTEMPTS"]
+    run, calls, _, _ = run_one_case(tmp_path, monkeypatch, [rate_limited()] * limit)
+    assert run.result == 0.0
+    assert calls == limit
+
+
+def test_other_errors_are_not_retried(tmp_path, monkeypatch):
+    run, calls, _, _ = run_one_case(tmp_path, monkeypatch, [RuntimeError("bad key")])
+    assert run.result == 0.0
+    assert calls == 1
