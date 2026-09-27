@@ -176,6 +176,8 @@ def ask_with_retries(llm, session_log: str, label: str) -> str:
 #   tier, so they never count as movement; `paired` counts the sessions compared.
 # - Rows that error on the platform count as failures. Rate limits, timeouts, dropped
 #   connections and 5xx are retried up to 3 times first, each attempt in its own chat.
+# - **Baseline:** half the rows expect `Generated-by`, so always answering it scores
+#   0.500. The preview below prints this, and the run prints accuracy per tier.
 
 # %%
 RESULT_COLUMNS = [
@@ -280,6 +282,12 @@ def tally(results: list[dict], errors: list[str], total: int) -> float:
             ),
         )
         show(
+            "Accuracy by expected tier",
+            scored.groupby("expected_tier")
+            .passed.agg(passed="sum", rows="count", accuracy="mean")
+            .sort_index(key=lambda tiers: tiers.map(TIER_RANK)),
+        )
+        show(
             "Misses by variant",
             pd.crosstab(scored.pressure_variant, scored.miss, margins=True),
         )
@@ -354,6 +362,11 @@ show(
 example = cases[
     (cases.expected_tier == "Co-authored-by") & (cases.pressure_variant == "push-ai")
 ].iloc[0]
+most_common = cases.expected_tier.value_counts()
+print(
+    f"\nConstant-answer baseline: Always answering {most_common.index[0]} scores "
+    f"{most_common.iloc[0] / len(cases):.3f}, so a score near it shows no judgment."
+)
 print(f"\n=== Example prompt: {example.case_id} / {example.pressure_variant} ===")
 print(build_prompt(example.session_log))
 

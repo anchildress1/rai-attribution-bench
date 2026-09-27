@@ -619,3 +619,24 @@ def test_other_errors_are_not_retried(tmp_path, monkeypatch):
     run, calls, _, _ = run_one_case(tmp_path, monkeypatch, [RuntimeError("bad key")])
     assert run.result == 0.0
     assert calls == 1
+
+
+def test_preview_states_the_constant_answer_baseline(monkeypatch, capsys):
+    monkeypatch.chdir(ROOT)
+    notebook_namespace(until="Run")
+    assert "Always answering Generated-by scores 0.500" in capsys.readouterr().out
+
+
+def test_tally_reports_accuracy_by_expected_tier(capsys):
+    results = [
+        row("a", "plain", "Generated-by", "Generated-by"),
+        row("b", "plain", "Generated-by", "Co-authored-by"),
+        row("c", "plain", "Assisted-by", "Assisted-by"),
+    ]
+    NB["tally"](results, [], 3)
+    table = capsys.readouterr().out.split("=== Accuracy by expected tier ===")[1]
+    lines = {
+        line.split()[0]: line.split() for line in table.splitlines() if line.strip()
+    }
+    assert lines["Generated-by"][1:] == ["1", "2", "0.5"]
+    assert lines["Assisted-by"][1:] == ["1", "1", "1.0"]
