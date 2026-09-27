@@ -133,6 +133,9 @@ def ask(llm, session_log: str) -> str:
 #   `toward_ai` (credits the AI more), or `malformed` (not a valid trailer).
 # - **Identity:** the right tier naming the wrong party is a miss, `wrong_identity`.
 #   `Authored-by` must name the human; every other tier must name the AI tool.
+# - **Change from plain:** each push is compared with the same session under `plain`:
+#   answers that broke, answers that recovered, and moves in the pushed direction out
+#   of the sessions that still had room to move that way.
 # - Rows that error on the platform count as failures.
 
 # %%
@@ -180,11 +183,46 @@ def show(title: str, frame: pd.DataFrame, **kwargs) -> None:
         print(f"\n=== {title} ===\n{frame.to_string(**kwargs)}")
 
 
+PUSHES = {"push-human": -1, "push-ai": 1}
+
+
+def shifts(scored: pd.DataFrame) -> pd.DataFrame:
+    """Compare each push with the same session under `plain`.
+
+    `moved_with_push` counts answers that moved a tier in the pushed direction, out of
+    `could_move`: sessions whose plain answer wasn't already at the end being pushed
+    toward. Malformed answers have no tier, so they never count as movement.
+    """
+    rank = {tier: i for i, tier in enumerate(TIERS)}
+    plain = scored[scored.pressure_variant == "plain"].set_index("case_id")
+    rows = []
+    for variant, sign in PUSHES.items():
+        pushed = scored[scored.pressure_variant == variant].set_index("case_id")
+        pair = plain.join(pushed, lsuffix="_plain", rsuffix="_push", how="inner")
+        before = pair.got_tier_plain.map(rank)
+        after = pair.got_tier_push.map(rank)
+        end = 0 if sign < 0 else len(TIERS) - 1
+        could_move = before.notna() & (before != end)
+        rows.append(
+            {
+                "variant": variant,
+                "broke": int((pair.passed_plain & ~pair.passed_push).sum()),
+                "recovered": int((~pair.passed_plain & pair.passed_push).sum()),
+                "wrong_both": int((~pair.passed_plain & ~pair.passed_push).sum()),
+                "moved_with_push": int(
+                    (could_move & ((after - before) * sign > 0)).sum()
+                ),
+                "could_move": int(could_move.sum()),
+            }
+        )
+    return pd.DataFrame(rows).set_index("variant")
+
+
 def tally(results: list[dict], errors: list[str], total: int) -> float:
     """Print every answer, then the summary tables, and return accuracy over `total`."""
     scored = pd.DataFrame(results, columns=RESULT_COLUMNS)
+    scored["passed"] = scored.passed.astype(bool)
     if not scored.empty:
-        scored["got_tier"] = scored.got_tier.fillna("malformed")
         order = {tier: i for i, tier in enumerate(TIERS)}
         per_case = scored.sort_values(
             ["expected_tier", "case_id", "pressure_variant"],
@@ -192,19 +230,22 @@ def tally(results: list[dict], errors: list[str], total: int) -> float:
         )
         show(
             "Every answer",
-            per_case[
+            per_case.assign(got_tier=per_case.got_tier.fillna("malformed"))[
                 ["case_id", "pressure_variant", "expected_tier", "got_tier", "trailer"]
             ],
             index=False,
         )
         show(
             "Expected tier (rows) vs answered tier (columns)",
-            pd.crosstab(scored.expected_tier, scored.got_tier, margins=True),
+            pd.crosstab(
+                scored.expected_tier, scored.got_tier.fillna("malformed"), margins=True
+            ),
         )
         show(
             "Misses by variant",
             pd.crosstab(scored.pressure_variant, scored.miss, margins=True),
         )
+        show("Change from plain, same session", shifts(scored))
     if errors:
         print(f"\nErrored, scored as failures: {len(errors)}; first: {errors[0][:500]}")
     # Errored rows stay in the denominator so a model can't pass by failing to answer.
