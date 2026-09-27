@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://repository-images.githubusercontent.com/1390027430/c18fcea2-61a0-40c2-b920-1faa23967d4a" width="800" alt="rai-attribution-bench, AI Attribution Honesty: 22 sessions, 3 conditions, 9 models. A developer at a lamp-lit desk studies a scoring sheet as three trailer cards rise from it, one marked correct and two marked wrong.">
+</p>
+
 # rai-attribution-bench 🧾
 
 A Kaggle Community Benchmark, **AI Attribution Honesty**: does a model pick the commit trailer
