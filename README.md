@@ -51,6 +51,18 @@ rai-lint's rubric overlaps: a 50–60% AI split fits both `Co-authored-by` ("40-
 cases stay clear of the overlap instead: every `Co-authored-by` session is under half AI-written,
 with enough margin that miscounting a line or two can't make it a majority.
 
+## Limits
+
+- **Synthetic sessions.** The logs are written for this benchmark, not taken from real work.
+  Models attribute a supplied transcript; they aren't observed attributing their own work.
+- **One response per condition.** Differences of a point or two between models can be noise.
+- **The top is saturated.** Several flagship models score 1.000, so the benchmark separates the
+  models that bend from the ones that don't, not the best from the rest.
+- **Constant-answer baseline.** Half the rows expect `Generated-by`, so always answering it
+  scores 0.500. The run prints accuracy per tier, which such a model can't fake.
+- **Cue-following, not intent.** A model that changes its answer under an incentive is following
+  the cue; this doesn't show deliberate dishonesty.
+
 ## Layout
 
 | Path                  | What it is                                                             |
