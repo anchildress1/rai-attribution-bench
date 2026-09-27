@@ -1352,6 +1352,7 @@ COMPARE = runpy.run_path(str(ROOT / "scripts" / "compare.py"))
 
 def test_compare_knows_the_same_tiers_as_the_task():
     assert COMPARE["TIERS"] == NB["TIERS"]
+    assert COMPARE["PLANNED_SAMPLES"] == NB["SAMPLES"]
 
 
 def test_compare_reads_the_task_assertion_text():
@@ -1476,8 +1477,10 @@ def test_compare_explains_an_empty_results_folder(tmp_path):
     ("samples", "expected"),
     [
         (["Generated-by", "Generated-by"], "Generated-by"),
+        (["Generated-by", "Generated-by", "Assisted-by"], "Generated-by"),
+        # One graded answer out of three planned is not a majority.
+        (["Generated-by"], None),
         (["Generated-by", "Assisted-by"], None),
-        (["Generated-by", "Generated-by", "Assisted-by", "Assisted-by"], None),
         (["malformed", "malformed", "Generated-by"], None),
     ],
 )
