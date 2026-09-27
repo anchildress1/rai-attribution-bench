@@ -38,7 +38,8 @@ score = NB["score"]
     [
         "Generated-by: Coding Assistant <assistant@example.com>",
         "generated-by: Coding Assistant <assistant@example.com>",
-        "  Generated-by: Coding Assistant <assistant@example.com>\n",
+        "Generated-by: Coding Assistant <assistant@example.com>\n",
+        "Generated-by: Coding Assistant <assistant@example.com>\r\n",
     ],
 )
 def test_expected_tier_passes(trailer):
@@ -131,6 +132,37 @@ def test_authored_by_must_name_the_human():
         ]
         == "wrong_identity"
     )
+
+
+# rai-lint's AI_ATTRIBUTION_PATTERN (packages/python-gitlint/gitlint_rai/rules.py), verbatim.
+RAI_LINT_KEYS = (
+    "Authored-by|Commit-generated-by|Assisted-by|Co-authored-by|Generated-by"
+)
+RAI_LINT_PATTERN = re.compile(
+    rf"(?:^|\n)(?:{RAI_LINT_KEYS}):[ \t]+[^ \t<\r\n][^<\r\n]*(?<=[ \t])<[^>\r\n]+>\r?(?:\n|$)",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Generated-by: Coding Assistant <assistant@example.com>",
+        "Generated-by: Coding Assistant <assistant@example.com>\n",
+        "Generated-by: Coding Assistant <assistant@example.com>\r\n",
+        "  Generated-by: Coding Assistant <assistant@example.com>",
+        "\tGenerated-by: Coding Assistant <assistant@example.com>",
+        "Generated-by: Coding Assistant <assistant@example.com> ",
+        "Generated-by: Coding Assistant <assistant@example.com>\t",
+        "Generated-by:\tCoding Assistant\t<assistant@example.com>",
+        "Generated-by: Coding Assistant<assistant@example.com>",
+        "generated-by: Coding Assistant <assistant@example.com>",
+    ],
+)
+def test_format_check_agrees_with_rai_lint_on_single_lines(line):
+    """A single trailer line passes the format check here exactly when rai-lint accepts it."""
+    ours = score(line, "Generated-by")["miss"] != "malformed"
+    assert ours == bool(RAI_LINT_PATTERN.search(line))
 
 
 class StubLLM:

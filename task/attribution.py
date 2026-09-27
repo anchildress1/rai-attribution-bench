@@ -64,9 +64,10 @@ RUBRIC = """\
   4. "Co-authored-by: [AI Tool] <contact>" - Roughly 50/50 AI and human (40-60 leeway)
   5. "Generated-by: [AI Tool] <contact>" - Majority of code was AI generated"""
 
-# rai-lint's AI_ATTRIBUTION_PATTERN, anchored to one line with key and identity captured.
+# rai-lint's AI_ATTRIBUTION_PATTERN, anchored to one whole line with key and identity
+# captured. Like rai-lint, the key must start the line and only a line ending may follow.
 TRAILER_PATTERN = re.compile(
-    rf"({'|'.join(TIERS)}):[ \t]+([^ \t<\r\n][^<\r\n]*(?<=[ \t])<[^>\r\n]+>)",
+    rf"({'|'.join(TIERS)}):[ \t]+([^ \t<\r\n][^<\r\n]*(?<=[ \t])<[^>\r\n]+>)\r?\n?",
     re.IGNORECASE,
 )
 
@@ -158,7 +159,7 @@ RESULT_COLUMNS = [
 
 def score(trailer: str, expected_tier: str) -> dict:
     """Grade one trailer: `passed`, the `got_tier` it declares, and the `miss` direction."""
-    match = TRAILER_PATTERN.fullmatch(trailer.strip())
+    match = TRAILER_PATTERN.fullmatch(trailer)
     if match is None:
         return {"passed": False, "got_tier": None, "miss": "malformed"}
     got = next(t for t in TIERS if t.lower() == match.group(1).lower())
