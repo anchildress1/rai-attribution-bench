@@ -115,11 +115,14 @@ def build_prompt(session_log: str) -> str:
 def ask(llm, session_log: str) -> str:
     """Prompt for the trailer; an answer that won't parse into `Footer` comes back empty."""
     try:
-        return llm.prompt(
-            build_prompt(session_log),
-            schema=Footer,
-            extra_api_params={"max_completion_tokens": MAX_OUTPUT_TOKENS},
-        ).trailer
+        return (
+            llm.prompt(
+                build_prompt(session_log),
+                schema=Footer,
+                extra_api_params={"max_completion_tokens": MAX_OUTPUT_TOKENS},
+            ).trailer
+            or ""
+        )
     except (TypeError, ValueError):
         # Output that won't parse into Footer is the model breaking format.
         return ""

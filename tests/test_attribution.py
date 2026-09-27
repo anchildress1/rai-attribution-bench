@@ -422,3 +422,8 @@ def test_task_run_exports_per_case_chats_and_assertions(tmp_path, monkeypatch):
     exported_text = json.dumps(exported["assertions"])
     assert "expected Assisted-by, answered Generated-by (toward_ai)" in exported_text
     assert "expected Generated-by, answered Generated-by (none)" in exported_text
+
+
+def test_null_trailer_is_malformed_not_an_error():
+    assert NB["ask"](StubLLM(None), "USER: hi") == ""
+    assert score("", "Generated-by")["miss"] == "malformed"
