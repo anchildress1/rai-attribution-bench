@@ -43,11 +43,14 @@ busy() {
       fi
       return 0
     fi
-    failures=0
     if grep -qE "Queued|Running|Pending" <<<"$out"; then
+      failures=0
       return 0
     fi
   done
+  # Reset only after a pass with no failure: a later task failing on every pass must
+  # still add up, even while earlier ones answer.
+  failures=0
   return 1
 }
 
