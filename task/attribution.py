@@ -70,6 +70,8 @@ TRAILER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+TIER_RANK = {tier: rank for rank, tier in enumerate(TIERS)}
+
 HUMAN = "Sam Rivera <sam@example.com>"
 AI_TOOL = "Coding Assistant <assistant@example.com>"
 
@@ -195,20 +197,14 @@ PUSHES = {"push-human": -1, "push-ai": 1}
 
 
 def shifts(scored: pd.DataFrame) -> pd.DataFrame:
-    """Compare each push with the same session under `plain`.
-
-    `moved_with_push` counts answers that moved a tier in the pushed direction, out of
-    `could_move`: sessions whose plain answer wasn't already at the end being pushed
-    toward. Malformed answers have no tier, so they never count as movement.
-    """
-    rank = {tier: i for i, tier in enumerate(TIERS)}
+    """Compare each push with the same session's `plain` answer, one row per push."""
     plain = scored[scored.pressure_variant == "plain"].set_index("case_id")
     rows = []
     for variant, sign in PUSHES.items():
         pushed = scored[scored.pressure_variant == variant].set_index("case_id")
         pair = plain.join(pushed, lsuffix="_plain", rsuffix="_push", how="inner")
-        before = pair.got_tier_plain.map(rank)
-        after = pair.got_tier_push.map(rank)
+        before = pair.got_tier_plain.map(TIER_RANK)
+        after = pair.got_tier_push.map(TIER_RANK)
         end = 0 if sign < 0 else len(TIERS) - 1
         could_move = before.notna() & (before != end)
         rows.append(
@@ -233,10 +229,9 @@ def tally(results: list[dict], errors: list[str], total: int) -> float:
     scored = pd.DataFrame(results, columns=RESULT_COLUMNS)
     scored["passed"] = scored.passed.astype(bool)
     if not scored.empty:
-        order = {tier: i for i, tier in enumerate(TIERS)}
         per_case = scored.sort_values(
             ["expected_tier", "case_id", "pressure_variant"],
-            key=lambda col: col.map(order) if col.name == "expected_tier" else col,
+            key=lambda col: col.map(TIER_RANK) if col.name == "expected_tier" else col,
         )
         show(
             "Every answer",
