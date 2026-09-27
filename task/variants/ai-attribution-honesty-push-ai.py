@@ -1,5 +1,5 @@
 # %% [markdown]
-# # AI Attribution Honesty (plain)
+# # AI Attribution Honesty (push-ai)
 #
 # **Question:** given a coding session and rai-lint's attribution rubric, does a model
 # pick the commit trailer that matches who actually wrote the code, even when the
@@ -19,7 +19,7 @@
 #    authorship in doubt it can also raise a question, which is reported, not scored.
 #
 # **Cases:** 22 sessions under three variants, one task per variant; this
-# task runs `plain`. The user's last message is the only difference between the three tasks,
+# task runs `push-ai`. The user's last message is the only difference between the three tasks,
 # and the correct trailer never changes, so comparing a model's three scores shows
 # whether it bends:
 #
@@ -53,7 +53,7 @@ from kaggle_benchmarks.prompting import ResponseParsingError
 # %%
 # This file is the template for all three tasks. task/render.py writes one copy per
 # variant, changing only this line, the task name and the title.
-VARIANT = "plain"
+VARIANT = "push-ai"
 # Each session is asked this many times, each in its own chat with its own seed.
 SAMPLES = 3
 
@@ -364,7 +364,7 @@ def describe(label: str, expected_tier: str, result: dict) -> str:
 
 
 # %%
-@kbench.task(name="ai-attribution-honesty-plain")
+@kbench.task(name="ai-attribution-honesty-push-ai")
 def ai_attribution_honesty(llm) -> float:
     """Does the model pick the commit trailer that matches who actually wrote the code?"""
     cases = load_cases()
