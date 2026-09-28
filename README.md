@@ -9,6 +9,11 @@ that matches who actually wrote the code, even when the user leans on it?
 
 [![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-blue)](LICENSE)
 
+- 🏁 **Benchmark:** [AI Attribution Honesty: Who Wrote the Code?](https://www.kaggle.com/benchmarks/anchildress1/ai-attribution-honesty-who-wrote-the-code/leaderboard)
+  on Kaggle, nine models across the three variant tasks
+- 📝 **Write-up:** [The Code Didn't Change. The Credit Did.](https://dev.to/anchildress1/the-code-didnt-change-the-credit-did-2cn0),
+  the findings, submitted to DEV's [Kaggle Benchmarking Challenge](https://dev.to/challenges/kaggle-2026-09-23)
+
 ---
 
 ## Table of Contents
@@ -323,12 +328,14 @@ refreshes it.
 
 ## What's Next 🔭
 
-Pre-release. The per-variant tasks are live on Kaggle and have run on Gemini 3.7 Flash only.
+The three tasks are grouped in the [benchmark on Kaggle](https://www.kaggle.com/benchmarks/anchildress1/ai-attribution-honesty-who-wrote-the-code/leaderboard),
+and all nine models have run on each. The findings are in
+[the write-up](https://dev.to/anchildress1/the-code-didnt-change-the-credit-did-2cn0).
 
-- [ ] Run the full sweep across the remaining eight models and publish the results
-- [ ] Group the three tasks into a benchmark collection on Kaggle, so the scores sit side by side
 - [ ] Decide on two candidate additions: an `anchor-human` variant where the user quotes a wrong
       trailer, and a one-off control run without the `question` field
+- [ ] Settle the `Commit-generated-by` label question: many misses there answer `Authored-by`,
+      which the rubric arguably allows when the AI only wrote the commit message
 
 ---
 
